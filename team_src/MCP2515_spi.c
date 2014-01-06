@@ -10,7 +10,10 @@
 #define	SPI_CS_LOW()	GpioDataRegs.GPACLEAR.bit.GPIO15 = 0
 #define	SPI_CS_HIGH()	GpioDataRegs.GPACLEAR.bit.GPIO15 = 1
 
-//todo write my SPI routines
+//function prototypes
+void SR_SPI(unsigned int length, unsigned int *buf);
+void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsigned int *buf);
+void MCP2515_reset(unsigned int rst);
 
 void SR_SPI(unsigned int length, unsigned int *buf)
 {
@@ -93,15 +96,15 @@ void MCP2515_spi_init()
 
     EALLOW;
     // SPI Chip Select line
-    GpioCtrlRegs.GPAMUX2.bit.GPIO15 = 0;         // GPIO
+    GpioCtrlRegs.GPAMUX1.bit.GPIO15 = 0;         // GPIO
     GpioCtrlRegs.GPADIR.bit.GPIO15 = 1;          // output
-    GpioCtrlRegs.GPAQSEL2.bit.GPIO15 = 0;        //Synch to SYSCLKOUT only
+    GpioCtrlRegs.GPAQSEL1.bit.GPIO15 = 0;        //Synch to SYSCLKOUT only
     GpioCtrlRegs.GPAPUD.bit.GPIO15 = 1;          //disable pull up
 
     // MCP2515 reset line
-    GpioCtrlRegs.GPAMUX2.bit.GPIO11 = 0;         // GPIO
+    GpioCtrlRegs.GPAMUX1.bit.GPIO11 = 0;         // GPIO
     GpioCtrlRegs.GPADIR.bit.GPIO11 = 1;          // output
-    GpioCtrlRegs.GPAQSEL2.bit.GPIO11 = 0;        //Synch to SYSCLKOUT only
+    GpioCtrlRegs.GPAQSEL1.bit.GPIO11 = 0;        //Synch to SYSCLKOUT only
     GpioCtrlRegs.GPAPUD.bit.GPIO11 = 1;          //disable pull up
 
     // MCP2515 interrupt line
@@ -117,10 +120,10 @@ void MCP2515_spi_init()
     GpioCtrlRegs.GPAPUD.bit.GPIO22 = 0;          //enable pull up
 
     // MCP2515 !RX1BF line
-    GpioCtrlRegs.GPAMUX2.bit.GPIO32 = 0;         // GPIO
-    GpioCtrlRegs.GPADIR.bit.GPIO32 = 0;          // input
-    GpioCtrlRegs.GPAQSEL2.bit.GPIO32 = 0;        //Synch to SYSCLKOUT only
-    GpioCtrlRegs.GPAPUD.bit.GPIO32 = 0;          //enable pull up
+    GpioCtrlRegs.GPBMUX1.bit.GPIO32 = 0;         // GPIO
+    GpioCtrlRegs.GPBDIR.bit.GPIO32 = 0;          // input
+    GpioCtrlRegs.GPBQSEL1.bit.GPIO32 = 0;        //Synch to SYSCLKOUT only
+    GpioCtrlRegs.GPBPUD.bit.GPIO32 = 0;          //enable pull up
     EDIS;
 
 }

@@ -6,7 +6,9 @@
  */
 
 #include "all.h"
-
+#include "MCP2515_spi.h"	//SPI initialization functions
+#include "MCP2515.h"		//MCP2515 functions
+#include "MCP2515_DEFS.h"
 
 ops_struct ops_temp;
 data_struct data_temp;
@@ -27,9 +29,9 @@ void SensorCov()
 
 void SensorCovInit()
 {
-	//todo USER: SensorCovInit()
-	//CONFIG ADC
-	adcinit();
+
+	MCP2515_spi_init();								//initialize SPI port and GPIO associated with the MCP2515
+	RamInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515
 
 	//CONFIG GP_BUTTON
 	ConfigGPButton();
@@ -39,8 +41,7 @@ void SensorCovInit()
 	ConfigLED0();
 	//led 1
 	ConfigLED1();
-	//CONFIG 12V SWITCH
-	Config12V();
+
 	conv_watch = StartStopWatch(4);
 }
 
@@ -54,61 +55,28 @@ void LatchStruct()
 
 void SensorCovMeasure()
 {
-	StopWatchRestart(conv_watch);
-
-	//todo USER: Sensor Conversion
-	//update data_temp and ops_temp
-	//use stopwatch to catch timeouts
-	//waiting should poll isStopWatchComplete() to catch timeout and throw StopWatchError
-
-	readADC();
-	data_temp.adc = A0RESULT;
+	unsigned int CANmessage_raw[13];
 
 	data_temp.gp_button = READGPBUTTON();
 
-	if (data_temp.gp_button == 0) 			//if pushed cause stopwatch
+	//todo CAN Mirror:
+	if(GpioDataRegs.GPADAT.bit.GPIO20 == 0 ) // poll MCP2515 interrupt pin(active low)
 	{
-		SETLED0();
-		int i = 0;
-		while (i < 100)
-		{
-			i++;
-		}
-	}
-	else
-	{
-		CLEARLED0();
+		//read CAN message from MCP2515
+		SR2_SPI(MCP_READ, MCP_RXB0SIDH, 13, CANmessage_raw);	//read raw can message
+		MCP2515Write(MCP_CANINTF, 0x00);						//clear interrupt
+
+		//reset Stopwatch
+		StopWatchRestart(conv_watch);
+
+		//Send CAN message on native CAN interface
 	}
 
-	if (data_temp.adc > 2000)
-	{
-		SETLED1();
-	}
-	else
-	{
-		CLEARLED1();
-	}
-
-	//exit and stopwatch error if timeout
-	if (isStopWatchComplete(conv_watch) == 1)
-	{
-		ops_temp.Flags.bit.cov_error = 1;
-	}
-	else
-	{
-		ops_temp.Flags.bit.cov_error = 0;
-	}
-
-
-	if (ops_temp.Flags.all != 0)
-	{
-		SET12V();
-	}
-	else
-	{
-		CLEAR12V();
-	}
-
+	//todo
+//	if(stopwatch overflow)
+//	{
+//		//indicate CAN bus A down
+//	}
 
 }
 
@@ -139,8 +107,8 @@ void UpdateStruct()
 void SensorCovDeInit()
 {
 	//todo USER: SensorCovDeInit()
+	MCP2515_reset(1);				//hold MCP2515 in reset
 	StopStopWatch(conv_watch);
 	CLEARLED0();
 	CLEARLED1();
-	CLEAR12V();
 }

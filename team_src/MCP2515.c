@@ -1,18 +1,23 @@
+//This library is non-portable, it uses C2000 specific _byte() intrinsic for bytewise access to memory
+
 // this file contain functions to use the Microchip MCP2515 CAN controller
-// User must provide SR_SPI(unsigned char length, unsigned char *buf); which sends the bytes in buf out on the SPI port, and returns the response in buf.
+// User must provide SR_SPI(uint16 length, uint16 *buf); which sends the bytes in buf out on the SPI port, and returns the response in buf. (each byte sent out is stored in a uint16)
 // User must provide SR2_SPI which works the same as SR_SPI except the first two bytes are passed as arguments.
-// User must provide MCP2515_reset(unsigned char rst); which sets the pin used as the MCP2515 reset high or low (rst = 1 is pin low, rst = 0  is pin high)
+// User must provide MCP2515_reset(uint16 rst); which sets the pin used as the MCP2515 reset high or low (rst = 1 is pin low, rst = 0  is pin high)
 
 #include "MCP2515_DEFS.h"
-#include <stdint.h>
-
-extern void SR_SPI(uint8_t length, uint8_t *buf);
-extern void SR2_SPI(uint8_t byte1, uint8_t byte2, uint8_t length, uint8_t *buf);
-extern void MCP2515_reset(uint8_t rst);
+#include "MCP2515_spi.h"
 
 //function prototypes
-void MCP2515Mode(uint8_t Mode);
-
+void MCP2515Mode(unsigned int Mode);
+int MCP2515SendMessage(unsigned int ID, unsigned long ExtID, unsigned int DataL, unsigned int* Data);
+int MCP2515GetMessage(unsigned int *dmesg);
+int MCP2515GetMessageAvailable(void);
+void MCP2515Mode(unsigned int Mode);
+void RamInitMCP2515(unsigned int cnf1, unsigned int *data);
+void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned int dl, unsigned int *data);
+unsigned int MCP2515Read(unsigned int Addr);
+void MCP2515Write(unsigned int Addr, unsigned int Data);
 
 //*****************************************************************************
 //sends a CAN message.
@@ -20,9 +25,10 @@ void MCP2515Mode(uint8_t Mode);
 //ExtID[15:0] are the extended identifier bits [15:0] 
 //DataL bit [6] is the RTR bit, bits [3:0] are the data length bits.
 //Data is a buffer of length (DataL & 0x0f), ie the 4 bit data length code. max of 8 bytes.
-int MCP2515SendMessage(uint16_t ID, uint32_t ExtID, uint8_t DataL, uint8_t* Data)
+int MCP2515SendMessage(unsigned int ID, unsigned long ExtID, unsigned int DataL, unsigned int* Data)
 {
-	int i
+	int i;
+	int tmp;
 	MCP2515LoadTx(0, ID, ExtID, DataL, Data);						//load tx buffer
 	MCP2515Write(MCP_TXB0CTRL,0x0B);							//flag message for sending
 	i=0;											//basic timeout. would be better to use a system tick
@@ -40,9 +46,9 @@ int MCP2515SendMessage(uint16_t ID, uint32_t ExtID, uint8_t DataL, uint8_t* Data
 
 //*****************************************************************************
 //Reads a single register of the MCP2515
-uint8_t MCP2515Read(uint8_t Addr)
+unsigned int MCP2515Read(unsigned int Addr)
 {
-	unsigned char buf[3];
+	unsigned int buf[3];
 	buf[0] = MCP_READ;
 	buf[1] = Addr;
 	buf[2] = 0x00;
@@ -51,9 +57,10 @@ uint8_t MCP2515Read(uint8_t Addr)
 }
 
 //*****************************************************************************
-void MCP2515Write(uint8_t Addr, uint8_t Data)
+//writes a single register of the MCP2515
+void MCP2515Write(unsigned int Addr, unsigned int Data)
 {
-	unsigned char buf[3];
+	unsigned int buf[3];
 	buf[0] = MCP_WRITE;
 	buf[1] = Addr;
 	buf[2] = Data;
@@ -66,9 +73,9 @@ void MCP2515Write(uint8_t Addr, uint8_t Data)
 //configuration mode is handled outside function to avoid unnecessary mode switching if other config functions are called.
 //if function is called when MCP2515 is not in configuration mode, returns 1 and does nothing, otherwise returns 0 and writes the Mask data
 // buf is assumed to point to 4 consecutive bytes of Mask configuration data, first byte = RXMnSIDH, last byte is RXMnEID0
-int MCP2515SetMask(uint8_t N, uint8_t *buf)
+int MCP2515SetMask(unsigned int N, unsigned int *buf)
 {
-	unsigned char addr;
+	unsigned int addr;
 
 	//check the current mode is configuration
 	if ((MCP2515Read(MCP_CANSTAT) >> 5) == 0x04)
@@ -98,9 +105,9 @@ int MCP2515SetMask(uint8_t N, uint8_t *buf)
 //configuration mode is handled outside function to avoid unnecessary mode switching if other config functions are called.
 //if function is called when MCP2515 is not in configuration mode, returns 1 and does nothing, otherwise returns 0 and writes the Filter data
 // buf is assumed to point to 4 consecutive bytes of Filter configuration data, first byte = RXFnSIDH, last byte is RXFnEID0
-int MCP2515SetFilter(uint8_t N, uint8_t *buf)
+int MCP2515SetFilter(unsigned int N, unsigned int *buf)
 {
-	unsigned char addr;
+	unsigned int addr;
 
 	//check the current mode is configuration
 	if ( (MCP2515Read(MCP_CANSTAT) >> 5) == 0x04)
@@ -141,9 +148,9 @@ int MCP2515SetFilter(uint8_t N, uint8_t *buf)
 //must put MCP2515 in configuration mode first.
 //configuration mode is handled outside function to avoid unnecessary mode switching if other config functions are called.
 //if function is called when MCP2515 is not in configuration mode, returns 1 and does nothing, otherwise returns 0 and writes the bit timing data
-uint8_t MCP2515SetBitTiming(uint8_t cnf1, uint8_t cnf2, uint8_t cnf3)
+unsigned int MCP2515SetBitTiming(unsigned int cnf1, unsigned int cnf2, unsigned int cnf3)
 {
-	uint8_t buf[5];
+	unsigned int buf[5];
 
 	//check the current mode aginst the requested one
 	if ( (MCP2515Read(MCP_CANSTAT) >> 5) == 0x04)
@@ -152,8 +159,8 @@ uint8_t MCP2515SetBitTiming(uint8_t cnf1, uint8_t cnf2, uint8_t cnf3)
 		// CNF 3,2,1 are sequential so can all be written by one SPI transaction
 		buf[0] = MCP_WRITE;
 		buf[1] = MCP_CNF3;
-		buf[2] = cnf3;	//value to write to CNF3
-		buf[3] = cnf2;	//value to write to CNF2
+		buf[2] = cnf3;			//value to write to CNF3
+		buf[3] = cnf2;			//value to write to CNF2
 		buf[4] = cnf1;
 		SR_SPI(5,buf);
 		return 0;
@@ -175,11 +182,14 @@ uint8_t MCP2515SetBitTiming(uint8_t cnf1, uint8_t cnf2, uint8_t cnf3)
 // for standard frames, the extended ID bits in array[2,3] are applied to the first two data bytes
 // mask0 and filter0, filter1 are associated with recieve buffer 0
 // mask1 and filters 2-5 are associated with recieve buffer 1
-void RamInitMCP2515(uint8_t cnf1, uint8_t *data)
+void RamInitMCP2515(unsigned int cnf1, unsigned int *data)
 {
 
 	MCP2515_reset(1);			//hold MCP2515 in reset
-	__builtin_avr_delay_cycles(128UL); 	//provide min 128cyc delay for MCP2515 reset(ensures that the OSC has stabilized)
+		
+	//todo replace this with some C2000 delay
+	//__builtin_avr_delay_cycles(128UL); 	//provide min 128cyc delay for MCP2515 reset(ensures that the OSC has stabilized)
+
 	MCP2515_reset(0);			//release MCP2515 from reset
 
 	//put MCP2515 is in configuration mode
@@ -214,11 +224,11 @@ void RamInitMCP2515(uint8_t cnf1, uint8_t *data)
 //*****************************************************************************
 //this function places the MCP2515 in the specified mode.
 //function will block untill the mode switch is sucessful.
-void MCP2515Mode(uint8_t Mode)
+void MCP2515Mode(unsigned int Mode)
 {
-	uint8_t Flag;
+	unsigned int Flag;
 	Flag = 1;
-	uint8_t buf[4];
+	unsigned int buf[4];
 	do
 	{
 		//check the current mode aginst the requested one
@@ -232,7 +242,9 @@ void MCP2515Mode(uint8_t Mode)
 			buf[3] = ((0x07 & Mode) << 5); 	//mode request
 			SR_SPI(4,buf);			//send transaction
 			//pause
-			__builtin_avr_delay_cycles(128UL);
+
+			//replace with C2000 delay			
+			//__builtin_avr_delay_cycles(128UL);
 		}
 		else
 		{
@@ -249,19 +261,19 @@ void MCP2515Mode(uint8_t Mode)
 //note only bits 10:0 in sid are valid identifier bits. bit 15 in sid is used for the EXIDE flag
 //only bits 17:0 in eid are valid identifier bits
 
-void MCP2515LoadTx(uint8_t n, uint16_t sid, uint32_t eid, uint8_t dl, uint8_t *data)
+void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned int dl, unsigned int *data)
 {
-	uint8_t i;
-	uint8_t buf[13];			//buffer for all the possible bytes in the transmit buffer
+	unsigned int i;
+	unsigned int buf[13];					//buffer for all the possible bytes in the transmit buffer
 
 	buf[0] = ((sid >> 3) & 0xFF);		//first reg is bits 10:3 of SID
 	buf[1] = ((sid & 0x07) << 5);		//put sid 2:0 in buf[1] 7:5
-	buf[1] |= ((sid & 0x8000) >> 12);	//sid:16 is EXIDE flag
+	buf[1] |= ((sid & 0x8000) >> 12);		//sid:16 is EXIDE flag
 	buf[1] |= ((eid & 0x00030000 ) >> 16);	//sid1:0 are eid 17:16
-	buf[2] = ((eid >> 8) & 0xFF);		
+	buf[2] = ((eid >> 8) & 0xFF);
 	buf[3] = (eid & 0xFF);
 	buf[4] = dl & 0x0F;			//data length
-	for(i=0;i<dl;i++)			//data bytes
+	for(i=0;i<dl;i++)				//data bytes
 		buf[5+i] = data[i];
 
 	switch(n)
@@ -274,7 +286,7 @@ void MCP2515LoadTx(uint8_t n, uint16_t sid, uint32_t eid, uint8_t dl, uint8_t *d
 
 int MCP2515GetMessageAvailable(void)
 {
-	uint8_t c;
+	unsigned int c;
 	//returns -1 if no message available, 0 if message in RXB0, 1 if message in RXB1
 	c = MCP2515Read(MCP_CANINTF);		//get interrupt flag register
 	if ( c & 0x01) return 0;
@@ -282,9 +294,8 @@ int MCP2515GetMessageAvailable(void)
 	return -1;
 }
 
-int MCP2515GetMessage(uint8_t *dmesg)
+int MCP2515GetMessage(unsigned int *dmesg)
 {
-	unsigned char i;
 
 	switch(MCP2515GetMessageAvailable())
 	{
