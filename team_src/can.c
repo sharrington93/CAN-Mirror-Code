@@ -70,6 +70,7 @@ void CANSetup()
 	ECanaShadow.CANMD.bit.MD3 = 0; 			//transmit
 	ECanaShadow.CANME.bit.ME3 = 1;			//enable
 
+	//can mirror transmit uses mailbox 4
 
 	ECanaRegs.CANGAM.all = ECanaShadow.CANGAM.all;
 	ECanaRegs.CANGIM.all = ECanaShadow.CANGIM.all;

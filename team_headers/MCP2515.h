@@ -9,7 +9,7 @@ extern int MCP2515SendMessage(unsigned int ID, unsigned long ExtID, unsigned int
 extern int MCP2515GetMessage(unsigned int *dmesg);
 extern int MCP2515GetMessageAvailable(void);
 extern void MCP2515Mode(unsigned int Mode);
-extern void RamInitMCP2515(unsigned int cnf1, unsigned int *data);
+extern void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data);
 extern void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned int dl, unsigned int *data);
 extern unsigned int MCP2515Read(unsigned int Addr);
 extern void MCP2515Write(unsigned int Addr, unsigned int Data);

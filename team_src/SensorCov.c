@@ -1,14 +1,17 @@
 /*
  * SensorCov().c
  *
- *  Created on: Oct 30, 2013
- *      Author: Nathan
+ *  Created on: Jan 5, 2014
+ *      Author: Jenn
  */
 
 #include "all.h"
 #include "MCP2515_spi.h"	//SPI initialization functions
 #include "MCP2515.h"		//MCP2515 functions
 #include "MCP2515_DEFS.h"
+
+//my special CAN message sending function
+extern int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf);
 
 ops_struct ops_temp;
 data_struct data_temp;
@@ -31,7 +34,7 @@ void SensorCovInit()
 {
 
 	MCP2515_spi_init();								//initialize SPI port and GPIO associated with the MCP2515
-	RamInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515
+	PgmInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515
 
 	//CONFIG GP_BUTTON
 	ConfigGPButton();
@@ -59,7 +62,6 @@ void SensorCovMeasure()
 
 	data_temp.gp_button = READGPBUTTON();
 
-	//todo CAN Mirror:
 	if(GpioDataRegs.GPADAT.bit.GPIO20 == 0 ) // poll MCP2515 interrupt pin(active low)
 	{
 		//read CAN message from MCP2515
@@ -70,13 +72,16 @@ void SensorCovMeasure()
 		StopWatchRestart(conv_watch);
 
 		//Send CAN message on native CAN interface
+		if(SendGeneralCANMessage(100, CANmessage_raw) == 1)	//if message fails to send
+		{
+			//do send message error stuff
+		}
 	}
 
-	//todo
-//	if(stopwatch overflow)
-//	{
-//		//indicate CAN bus A down
-//	}
+    if (isStopWatchComplete(conv_watch) == 1)
+	{
+		//indicate CAN bus A down
+	}
 
 }
 

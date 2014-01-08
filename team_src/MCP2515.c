@@ -8,13 +8,17 @@
 #include "MCP2515_DEFS.h"
 #include "MCP2515_spi.h"
 
+extern void DSP28x_usDelay(unsigned long Count);
+#define CPU_RATE   16.667L   // for a 60MHz CPU clock speed (SYSCLKOUT)
+#define DELAY_US(A)  DSP28x_usDelay(((((long double) A * 1000.0L) / (long double)CPU_RATE) - 9.0L) / 5.0L)
+
 //function prototypes
 void MCP2515Mode(unsigned int Mode);
 int MCP2515SendMessage(unsigned int ID, unsigned long ExtID, unsigned int DataL, unsigned int* Data);
 int MCP2515GetMessage(unsigned int *dmesg);
 int MCP2515GetMessageAvailable(void);
 void MCP2515Mode(unsigned int Mode);
-void RamInitMCP2515(unsigned int cnf1, unsigned int *data);
+void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data);
 void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned int dl, unsigned int *data);
 unsigned int MCP2515Read(unsigned int Addr);
 void MCP2515Write(unsigned int Addr, unsigned int Data);
@@ -172,9 +176,7 @@ unsigned int MCP2515SetBitTiming(unsigned int cnf1, unsigned int cnf2, unsigned 
 }
 
 //*****************************************************************************
-//This function initializes the MCP2515, with values stored in RAM.
-//arguments are CNF1 to set bitrate. pointer to unsigned char.
-//it is assumed that all bytes for configuration will be read from sram starting at the data pointer
+//This function initializes the MCP2515, with values stored in program memory.
 //there are a total of 4bytes/mask or filter and 8 masks/filters for a total of 32 bytes
 // the order of registers is mask0,mask1,filter0..filter5. So the first 8 bytes are RXM0SIDH,RXM0SIDL,RXM0EID8,RXM0EID0,RXM1SIDH,RXM1SIDL,RXM1EID8,RXM1EID0 ...
 //Mask bits which are 0 accept all message bits, mask bits which are 1 require the message bit to match a filter bit
@@ -182,13 +184,15 @@ unsigned int MCP2515SetBitTiming(unsigned int cnf1, unsigned int cnf2, unsigned 
 // for standard frames, the extended ID bits in array[2,3] are applied to the first two data bytes
 // mask0 and filter0, filter1 are associated with recieve buffer 0
 // mask1 and filters 2-5 are associated with recieve buffer 1
-void RamInitMCP2515(unsigned int cnf1, unsigned int *data)
+void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data)
 {
 
+	unsigned int buf[12];
+	unsigned int i;
+
 	MCP2515_reset(1);			//hold MCP2515 in reset
-		
-	//todo replace this with some C2000 delay
-	//__builtin_avr_delay_cycles(128UL); 	//provide min 128cyc delay for MCP2515 reset(ensures that the OSC has stabilized)
+
+	DELAY_US(100);
 
 	MCP2515_reset(0);			//release MCP2515 from reset
 
@@ -211,11 +215,14 @@ void RamInitMCP2515(unsigned int cnf1, unsigned int *data)
 	
 	//set mask/filter registers
 	//masks 0,1 are contiguous, can set them with a single write
-	SR2_SPI(MCP_WRITE, MCP_RXM0SIDH, 8, data);	//will take values data[0] - data[7]
+	for(i=0;i<8;i++) buf[i]=data[i];
+	SR2_SPI(MCP_WRITE, MCP_RXM0SIDH, 8, buf);	//will take values data[0] - data[7]
 	 //filters 0,1,2 are contiguous, can set them with a single write
-	SR2_SPI(MCP_WRITE, MCP_RXF0SIDH, 12, data+8);	//will take values data[8] - data[19]
+	for(i=0;i<12;i++) buf[i]=data[i+8];
+	SR2_SPI(MCP_WRITE, MCP_RXF0SIDH, 12, buf);	//will take values data[8] - data[19]
 	//filters 3,4,5 are contiguous, can set them with a single write
-	SR2_SPI(MCP_WRITE, MCP_RXF3SIDH, 12, data+20);	//will take values data[20] - data[31]
+	for(i=0;i<12;i++) buf[i]=data[i+20];
+	SR2_SPI(MCP_WRITE, MCP_RXF3SIDH, 12, buf);	//will take values data[20] - data[31]
 
 	//set normal mode
 	MCP2515Mode(0x00);
@@ -303,13 +310,10 @@ int MCP2515GetMessage(unsigned int *dmesg)
 		SR2_SPI(MCP_READ, MCP_RXB0SIDH, 13, dmesg);	//read raw can message from RXB0
 		MCP2515Write(MCP_CANINTF, 0x00);		//clear interrupt
 		return 0;
-
-	break;
 	case 1:
 		SR2_SPI(MCP_READ, MCP_RXB1SIDH, 13, dmesg);	//read raw can message from RXB1
 		MCP2515Write(MCP_CANINTF, 0x00);		//clear interrupt
 		return 1;
-	break;
 	default:
 		return -1;
 	}
