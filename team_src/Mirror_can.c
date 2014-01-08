@@ -70,7 +70,7 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 
 	mirror_can_watch = StartStopWatch(timeout);		//start stopwatch for timeout
 
-	do { ECanaShadow.CANTA.all = ECanaRega.CANTA.all; } while(((ECanaShadow.CANTA.all & (1 << 0x04)) != (1 << 0x04)) && (isStopWatchComplete(mirror_can_watch) == 0)); //wait to send or hit stop watch
+	do { ECanaShadow.CANTA.all = ECanaRegs.CANTA.all; } while(((ECanaShadow.CANTA.all & (1 << 0x04)) != (1 << 0x04)) && (isStopWatchComplete(mirror_can_watch) == 0)); //wait to send or hit stop watch
 
 		ECanaShadow.CANTA.all = 1 << 0x04;
 		ECanaRegs.CANTA.all = ECanaShadow.CANTA.all;						//clear flag
