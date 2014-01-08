@@ -7,8 +7,8 @@
 
 #include "all.h"
 
-#define	SPI_CS_LOW()	GpioDataRegs.GPACLEAR.bit.GPIO15 = 0
-#define	SPI_CS_HIGH()	GpioDataRegs.GPACLEAR.bit.GPIO15 = 1
+#define	SPI_CS_LOW()	GpioDataRegs.GPACLEAR.bit.GPIO15 = 1
+#define	SPI_CS_HIGH()	GpioDataRegs.GPASET.bit.GPIO15 = 1
 
 //function prototypes
 void SR_SPI(unsigned int length, unsigned int *buf);
@@ -58,11 +58,11 @@ void MCP2515_reset(unsigned int rst)
 {
 	if (rst)
 	{
-		GpioDataRegs.GPACLEAR.bit.GPIO11 = 0;
+		GpioDataRegs.GPACLEAR.bit.GPIO11 = 1;
 	}
 	else
 	{
-		GpioDataRegs.GPACLEAR.bit.GPIO11 = 1;
+		GpioDataRegs.GPASET.bit.GPIO11 = 1;
 	}
 }
 
