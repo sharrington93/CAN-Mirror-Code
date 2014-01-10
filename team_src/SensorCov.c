@@ -45,7 +45,7 @@ void SensorCovInit()
 	//led 1
 	ConfigLED1();
 
-	conv_watch = StartStopWatch(4);
+	conv_watch = StartStopWatch(50000);
 }
 
 
@@ -72,7 +72,7 @@ void SensorCovMeasure()
 		StopWatchRestart(conv_watch);
 
 		//Send CAN message on native CAN interface
-		if(SendGeneralCANMessage(100, CANmessage_raw) == 1)	//if message fails to send
+		if(SendGeneralCANMessage(SENDCAN_STOPWATCH, CANmessage_raw) == 1)	//if message fails to send
 		{
 			//do send message error stuff
 		}

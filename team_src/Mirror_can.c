@@ -21,6 +21,7 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 {
 	struct ECAN_REGS ECanaShadow;	//shadow structure for modifying CAN registers
 	stopwatch_struct* mirror_can_watch;
+	int ret;
 
 	EALLOW;
 	//set up mailbox(4)
@@ -75,7 +76,9 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 		ECanaShadow.CANTA.all = 1 << 0x04;
 		ECanaRegs.CANTA.all = ECanaShadow.CANTA.all;						//clear flag
 
-		return isStopWatchComplete(mirror_can_watch);
+		ret = isStopWatchComplete(mirror_can_watch);
+		StopStopWatch(mirror_can_watch);
+		return ret;
 }
 
 
