@@ -23,9 +23,9 @@ void SR_SPI(unsigned int length, unsigned int *buf)
 	SPI_CS_LOW();						//set CS low
 	for(i=0;i<length;i++)					//loop over length
 	{
-		SpiaRegs.SPITXBUF=(buf[i]<<8);			//send byte		
-		while(SpiaRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-		buf[i] = SpiaRegs.SPIRXBUF;			//save response
+		SpibRegs.SPITXBUF=(buf[i]<<8);			//send byte
+		while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
+		buf[i] = SpibRegs.SPIRXBUF;			//save response
 	}
 	SPI_CS_HIGH();						//set CS high
 }
@@ -37,19 +37,19 @@ void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsign
 	//todo figure out the C2000 equiv of this //while (!(UCSRnA & (1<<UDRE0)));		//wait for transmitter ready	
 	SPI_CS_LOW();						//set CS low
 
-	SpiaRegs.SPITXBUF=(byte1<<8);			//send byte		
-	while(SpiaRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-	i = SpiaRegs.SPIRXBUF;				//dummy read
+	SpibRegs.SPITXBUF=(byte1<<8);			//send byte
+	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
+	i = SpibRegs.SPIRXBUF;				//dummy read
 
-	SpiaRegs.SPITXBUF=(byte2<<8);			//send byte		
-	while(SpiaRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-	i = SpiaRegs.SPIRXBUF;				//dummy read
+	SpibRegs.SPITXBUF=(byte2<<8);			//send byte
+	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
+	i = SpibRegs.SPIRXBUF;				//dummy read
 
 	for(i=0;i<length;i++)					//loop over length
 	{
-		SpiaRegs.SPITXBUF=(buf[i]<<8);			//send byte		
-		while(SpiaRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-		buf[i] = SpiaRegs.SPIRXBUF;			//save response
+		SpibRegs.SPITXBUF=(buf[i]<<8);			//send byte
+		while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
+		buf[i] = SpibRegs.SPIRXBUF;			//save response
 	}
 	SPI_CS_HIGH();						//set CS high
 }
@@ -69,28 +69,28 @@ void MCP2515_reset(unsigned int rst)
 void MCP2515_spi_init()
 {
 // Initialize SPI FIFO registers
-   SpiaRegs.SPICCR.bit.SPISWRESET=0;     // Reset SPI
+   SpibRegs.SPICCR.bit.SPISWRESET=0;     // Reset SPI
 
-   SpiaRegs.SPICCR.all=0x0007;           //8-bit no loopback
+   SpibRegs.SPICCR.all=0x0007;           //8-bit no loopback
 
-   SpiaRegs.SPICTL.all=0x0006;           //// Enable master mode, normal phase,enable talk, and SPI int disabled.
+   SpibRegs.SPICTL.all=0x0006;           //// Enable master mode, normal phase,enable talk, and SPI int disabled.
 
-   SpiaRegs.SPISTS.all=0x0000;
-   SpiaRegs.SPIBRR = 127;                //Baudrate is slow as possible
+   SpibRegs.SPISTS.all=0x0000;
+   SpibRegs.SPIBRR = 127;                //Baudrate is slow as possible
   //SpiaRegs.SPIBRR=0x0063;              // Baud rate
 
-   SpiaRegs.SPIFFTX.all=0xC021;          // Enable FIFO's, set TX FIFO level to 1 CHOOSE LEVEL ACCORDING TO APPLICATION
+   SpibRegs.SPIFFTX.all=0xC021;          // Enable FIFO's, set TX FIFO level to 1 CHOOSE LEVEL ACCORDING TO APPLICATION
 
-   SpiaRegs.SPIFFRX.all=0x0021;          // Set RX FIFO level to 1
-   SpiaRegs.SPIFFCT.all=0x00;
+   SpibRegs.SPIFFRX.all=0x0021;          // Set RX FIFO level to 1
+   SpibRegs.SPIFFCT.all=0x00;
 
-   SpiaRegs.SPIPRI.bit.FREE=1;
+   SpibRegs.SPIPRI.bit.FREE=1;
 
-   SpiaRegs.SPICCR.bit.SPISWRESET=1;      // Enable SPI
+   SpibRegs.SPICCR.bit.SPISWRESET=1;      // Enable SPI
 
-  SpiaRegs.SPIFFTX.bit.TXFIFO=1;
-  SpiaRegs.SPIFFTX.bit.SPIRST=1;
-  SpiaRegs.SPIFFRX.bit.RXFIFORESET=1;
+   SpibRegs.SPIFFTX.bit.TXFIFO=1;
+   SpibRegs.SPIFFTX.bit.SPIRST=1;
+   SpibRegs.SPIFFRX.bit.RXFIFORESET=1;
 
   //initialize GPIO pins ~CS, MCP2515 reset, MCP2515 int, rx0bf, rx1bf
 

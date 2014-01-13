@@ -250,8 +250,7 @@ void MCP2515Mode(unsigned int Mode)
 			SR_SPI(4,buf);			//send transaction
 			//pause
 
-			//replace with C2000 delay			
-			//__builtin_avr_delay_cycles(128UL);
+			DELAY_US(100);
 		}
 		else
 		{
