@@ -8,12 +8,15 @@
 
 unsigned int mask;
 stopwatch_struct* can_watch;
+struct ECAN_REGS ECanaShadow;
 
 void CANSetup()
 {
-	struct ECAN_REGS ECanaShadow;
+
 	InitECanaGpio();
 	InitECana();
+
+	ClearMailBoxes();
 
 	ECanaShadow.CANMIM.all = 0;
 	ECanaShadow.CANMIL.all = 0;
@@ -70,7 +73,6 @@ void CANSetup()
 	ECanaShadow.CANMD.bit.MD3 = 0; 			//transmit
 	ECanaShadow.CANME.bit.ME3 = 1;			//enable
 
-	//can mirror transmit uses mailbox 4
 
 	ECanaRegs.CANGAM.all = ECanaShadow.CANGAM.all;
 	ECanaRegs.CANGIM.all = ECanaShadow.CANGIM.all;
@@ -90,7 +92,72 @@ void CANSetup()
     can_watch = StartStopWatch(SENDCAN_STOPWATCH);
 }
 
-
+void ClearMailBoxes()
+{
+    ECanaMboxes.MBOX0.MDH.all = 0;
+    ECanaMboxes.MBOX0.MDL.all = 0;
+    ECanaMboxes.MBOX1.MDH.all = 0;
+    ECanaMboxes.MBOX1.MDL.all = 0;
+    ECanaMboxes.MBOX2.MDH.all = 0;
+    ECanaMboxes.MBOX2.MDL.all = 0;
+    ECanaMboxes.MBOX3.MDH.all = 0;
+    ECanaMboxes.MBOX3.MDL.all = 0;
+    ECanaMboxes.MBOX4.MDH.all = 0;
+    ECanaMboxes.MBOX4.MDL.all = 0;
+    ECanaMboxes.MBOX5.MDH.all = 0;
+    ECanaMboxes.MBOX5.MDL.all = 0;
+    ECanaMboxes.MBOX6.MDH.all = 0;
+    ECanaMboxes.MBOX6.MDL.all = 0;
+    ECanaMboxes.MBOX7.MDH.all = 0;
+    ECanaMboxes.MBOX7.MDL.all = 0;
+    ECanaMboxes.MBOX8.MDH.all = 0;
+    ECanaMboxes.MBOX8.MDL.all = 0;
+    ECanaMboxes.MBOX9.MDH.all = 0;
+    ECanaMboxes.MBOX9.MDL.all = 0;
+    ECanaMboxes.MBOX10.MDH.all = 0;
+    ECanaMboxes.MBOX10.MDL.all = 0;
+    ECanaMboxes.MBOX11.MDH.all = 0;
+    ECanaMboxes.MBOX11.MDL.all = 0;
+    ECanaMboxes.MBOX12.MDH.all = 0;
+    ECanaMboxes.MBOX12.MDL.all = 0;
+    ECanaMboxes.MBOX13.MDH.all = 0;
+    ECanaMboxes.MBOX13.MDL.all = 0;
+    ECanaMboxes.MBOX14.MDH.all = 0;
+    ECanaMboxes.MBOX14.MDL.all = 0;
+    ECanaMboxes.MBOX15.MDH.all = 0;
+    ECanaMboxes.MBOX15.MDL.all = 0;
+    ECanaMboxes.MBOX16.MDH.all = 0;
+    ECanaMboxes.MBOX16.MDL.all = 0;
+    ECanaMboxes.MBOX17.MDH.all = 0;
+    ECanaMboxes.MBOX17.MDL.all = 0;
+    ECanaMboxes.MBOX18.MDH.all = 0;
+    ECanaMboxes.MBOX18.MDL.all = 0;
+    ECanaMboxes.MBOX19.MDH.all = 0;
+    ECanaMboxes.MBOX19.MDL.all = 0;
+    ECanaMboxes.MBOX20.MDH.all = 0;
+    ECanaMboxes.MBOX20.MDL.all = 0;
+    ECanaMboxes.MBOX21.MDH.all = 0;
+    ECanaMboxes.MBOX21.MDL.all = 0;
+    ECanaMboxes.MBOX22.MDH.all = 0;
+    ECanaMboxes.MBOX22.MDL.all = 0;
+    ECanaMboxes.MBOX23.MDH.all = 0;
+    ECanaMboxes.MBOX23.MDL.all = 0;
+    ECanaMboxes.MBOX24.MDH.all = 0;
+    ECanaMboxes.MBOX24.MDL.all = 0;
+    ECanaMboxes.MBOX25.MDH.all = 0;
+    ECanaMboxes.MBOX25.MDL.all = 0;
+    ECanaMboxes.MBOX26.MDH.all = 0;
+    ECanaMboxes.MBOX26.MDL.all = 0;
+    ECanaMboxes.MBOX27.MDH.all = 0;
+    ECanaMboxes.MBOX27.MDL.all = 0;
+    ECanaMboxes.MBOX28.MDH.all = 0;
+    ECanaMboxes.MBOX28.MDL.all = 0;
+    ECanaMboxes.MBOX29.MDH.all = 0;
+    ECanaMboxes.MBOX30.MDL.all = 0;
+    ECanaMboxes.MBOX30.MDH.all = 0;
+    ECanaMboxes.MBOX31.MDL.all = 0;
+    ECanaMboxes.MBOX31.MDH.all = 0;
+}
 
 char FillCAN(unsigned int Mbox)
 {
@@ -159,7 +226,8 @@ void SendCAN(unsigned int Mbox)
 	//todo Nathan: calibrate sendcan stopwatch
 	StopWatchRestart(can_watch);
 
-	while(((ECanaRegs.CANTA.all & mask) != mask) && (isStopWatchComplete(can_watch) == 0)); //wait to send or hit stop watch
+	do{ECanaShadow.CANTA.all = ECanaRegs.CANTA.all;}
+	while(((ECanaShadow.CANTA.all & mask) != mask) && (isStopWatchComplete(can_watch) == 0)); //wait to send or hit stop watch
 
 	ECanaRegs.CANTA.all = mask;						//clear flag
 	if (isStopWatchComplete(can_watch) == 1)					//if stopwatch flag
@@ -186,7 +254,8 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 	Uint32 ops_id;
 	Uint32 dummy;
   	unsigned int mailbox_nr;
-  	mailbox_nr = ECanaRegs.CANGIF1.bit.MIV1;
+  	ECanaShadow.CANGIF1.bit.MIV1 =  ECanaRegs.CANGIF1.bit.MIV1;
+  	mailbox_nr = ECanaShadow.CANGIF1.bit.MIV1;
   	//todo USER: Setup ops command
   	if(mailbox_nr == COMMAND_BOX)
   	{
@@ -207,6 +276,7 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 			ops.Change.bit.Flags = 1;
 			break;
 		}
+		ECanaRegs.CANRMP.bit.RMP0 = 1;
   	}
   	//todo USER: Setup other reads
 

@@ -35,11 +35,11 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 	//message ID is bit 31 = EXID, bit 30,29 = acceptance bits, 0 for transmit, 28:0 ID, ID is left aligned
 	if (buf[1] & 0x0008)
 	{//extended ID
-		ECanaMboxes.MBOX4.MSGID.all = (0x80000000 | (buf[1] & 0x00000003) << 27 | (buf[2] & 0x000000FF) << 19 | (buf[3] & 0x000000FF) << 10 | (buf[0] & 0x000000FF) << 3 | (buf[1] & 0x000000E0) >> 5);
+		ECanaMboxes.MBOX4.MSGID.all = (0x80000000L | (buf[1] & 0x00000003L) << 27 | (buf[2] & 0x000000FFL) << 19 | (buf[3] & 0x000000FFL) << 10 | (buf[0] & 0x000000FFL) << 3 | (buf[1] & 0x000000E0L) >> 5);
 	}
 	else
 	{//standard ID
-		ECanaMboxes.MBOX4.MSGID.all = (0x00000000 | (buf[0] & 0x000000FF) << 3 | (buf[1] & 0x000000E0) >> 5);
+		ECanaMboxes.MBOX4.MSGID.all = (0x00000000L | (buf[0] & 0x000000FFL) << 3 | (buf[1] & 0x000000E0L) >> 5);
 	}
 
 	ECanaMboxes.MBOX4.MSGCTRL.bit.DLC = buf[4] & 0x000F;			//DLC
@@ -56,8 +56,8 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 	ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;	//set regs
 
 	//set data
-	ECanaMboxes.MBOX4.MDL.all = (buf[5] & 0x000000FF) | (buf[6] & 0x000000FF) << 8 | (buf[7] & 0x000000FF) << 16 | (buf[8] & 0x000000FF) << 24;					//fill data
-	ECanaMboxes.MBOX4.MDH.all = (buf[9] & 0x000000FF) | (buf[10] & 0x000000FF) << 8 | (buf[11] & 0x000000FF) << 16 | (buf[12] & 0x000000FF) << 24;
+	ECanaMboxes.MBOX4.MDL.all = (buf[5] & 0x000000FFL) | (buf[6] & 0x000000FFL) << 8 | (buf[7] & 0x000000FFL) << 16 | (buf[8] & 0x000000FFL) << 24;					//fill data
+	ECanaMboxes.MBOX4.MDH.all = (buf[9] & 0x000000FFL) | (buf[10] & 0x000000FFL) << 8 | (buf[11] & 0x000000FFL) << 16 | (buf[12] & 0x000000FFL) << 24;
 
 	ECanaShadow.CANMC.bit.MBNR = 0;					//clear request for mailbox 4
 	ECanaShadow.CANMC.bit.CDR = 0;					//clear change data field request
