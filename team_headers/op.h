@@ -27,8 +27,10 @@ typedef struct CHANGE_OPS
 //todo User: stopwatch errors
 typedef struct FLAGS
 {
-	char cov_error : 1;
-	char can_error : 1;
+	char Overflow	 : 8;
+	char Timeout	 : 6;
+	char can_error	 : 1;
+	char CANA_status : 1;
 }flags_struct;
 
 typedef struct OPERATIONS
@@ -37,7 +39,7 @@ typedef struct OPERATIONS
   union Flag
   {
 	  long						all;
-	  flags_struct 				bit;
+	  flags_struct 				fields;
   }								Flags;
   union CHANGE
   {

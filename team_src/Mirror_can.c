@@ -7,7 +7,7 @@
 
 #include "all.h"
 
-stopwatch_struct* mirror_can_watch;
+extern stopwatch_struct* mirror_can_watch;
 
 int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf);	//sends a CAN message immediately, with timeout
 

@@ -229,14 +229,14 @@ void SendCAN(unsigned int Mbox)
 	do{ECanaShadow.CANTA.all = ECanaRegs.CANTA.all;}
 	while(((ECanaShadow.CANTA.all & mask) != mask) && (isStopWatchComplete(can_watch) == 0)); //wait to send or hit stop watch
 
-	ECanaRegs.CANTA.all = mask;						//clear flag
+	ECanaRegs.CANTA.all = mask;									//clear flag
 	if (isStopWatchComplete(can_watch) == 1)					//if stopwatch flag
 	{
-		ops.Flags.bit.can_error = 1;
+		ops.Flags.fields.can_error = 1;
 	}
-	else if (ops.Flags.bit.can_error == 1)		//if no stopwatch and flagged reset
+	else if (ops.Flags.fields.can_error == 1)		//if no stopwatch and flagged reset
 	{
-		ops.Flags.bit.can_error = 0;
+		ops.Flags.fields.can_error = 0;
 	}
 }
 
