@@ -10,6 +10,8 @@
 #include "MCP2515.h"		//MCP2515 functions
 #include "MCP2515_DEFS.h"
 
+extern stopwatch_struct* mirror_can_watch;
+
 //my special CAN message sending function
 extern int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf);
 
@@ -22,10 +24,10 @@ void SensorCov()
 	SensorCovInit();
 	while (ops.State == STATE_SENSOR_COV)
 	{
-		LatchStruct();
+	//	LatchStruct();
 		SensorCovMeasure();
-		UpdateStruct();
-		FillCANData();
+	//	UpdateStruct();
+	//	FillCANData();
 	}
 	SensorCovDeInit();
 }
@@ -39,6 +41,7 @@ void SensorCovInit()
 	//CONFIG GP_BUTTON
 	ConfigGPButton();
 
+	mirror_can_watch = StartStopWatch(100);		//start stopwatch for timeout
 	//CONFIG LEDS
 	//led 0
 	ConfigLED0();
@@ -116,4 +119,5 @@ void SensorCovDeInit()
 	StopStopWatch(conv_watch);
 	CLEARLED0();
 	CLEARLED1();
+	StopStopWatch(mirror_can_watch);
 }

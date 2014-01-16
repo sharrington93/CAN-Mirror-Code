@@ -7,6 +7,8 @@
 
 #include "all.h"
 
+stopwatch_struct* mirror_can_watch;
+
 int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf);	//sends a CAN message immediately, with timeout
 
 //The format for the data in buf follows the format of the MCP2515, in all cases bits 15:8 of the uint16 are ignored
@@ -20,8 +22,9 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf);	//sends a CA
 int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 {
 	struct ECAN_REGS ECanaShadow;	//shadow structure for modifying CAN registers
-	stopwatch_struct* mirror_can_watch;
 	int ret;
+
+	do { ECanaShadow.CANTRS.all = ECanaRegs.CANTRS.all; } while(((ECanaShadow.CANTRS.all & (1 << 0x04)) != 0)); //wait to send or hit stop watch
 
 	EALLOW;
 	//set up mailbox(4)
@@ -39,7 +42,7 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 	}
 	else
 	{//standard ID
-		ECanaMboxes.MBOX4.MSGID.all = (0x00000000L | (buf[0] & 0x000000FFL) << 3 | (buf[1] & 0x000000E0L) >> 5);
+		ECanaMboxes.MBOX4.MSGID.bit.STDMSGID = (0x00000000L | (buf[0] & 0x000000FFL) << 3 | (buf[1] & 0x000000E0L) >> 5);
 	}
 
 	ECanaMboxes.MBOX4.MSGCTRL.bit.DLC = buf[4] & 0x000F;			//DLC
@@ -69,15 +72,14 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 	ECanaShadow.CANTRS.all = 1 << 0x04;				//mark mailbox 4 for transmit
 	ECanaRegs.CANTRS.all = ECanaShadow.CANTRS.all;	//set in real registers
 
-	mirror_can_watch = StartStopWatch(timeout);		//start stopwatch for timeout
-
-	do { ECanaShadow.CANTA.all = ECanaRegs.CANTA.all; } while(((ECanaShadow.CANTA.all & (1 << 0x04)) != (1 << 0x04)) && (isStopWatchComplete(mirror_can_watch) == 0)); //wait to send or hit stop watch
+	StopWatchRestart(mirror_can_watch);
+//	mirror_can_watch = StartStopWatch(timeout);		//start stopwatch for timeout
 
 		ECanaShadow.CANTA.all = 1 << 0x04;
 		ECanaRegs.CANTA.all = ECanaShadow.CANTA.all;						//clear flag
 
 		ret = isStopWatchComplete(mirror_can_watch);
-		StopStopWatch(mirror_can_watch);
+
 		return ret;
 }
 

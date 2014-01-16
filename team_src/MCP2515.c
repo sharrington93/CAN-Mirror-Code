@@ -191,10 +191,14 @@ void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data)
 	unsigned int i;
 
 	MCP2515_reset(1);			//hold MCP2515 in reset
+	MCP2515_reset(1);			//hold MCP2515 in reset
 
 	DELAY_US(100);
 
 	MCP2515_reset(0);			//release MCP2515 from reset
+	MCP2515_reset(0);			//release MCP2515 from reset
+
+	DELAY_US(100);
 
 	//put MCP2515 is in configuration mode
 	MCP2515Mode(0x04);

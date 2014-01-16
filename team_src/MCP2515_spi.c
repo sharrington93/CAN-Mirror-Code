@@ -71,12 +71,12 @@ void MCP2515_spi_init()
 // Initialize SPI FIFO registers
    SpibRegs.SPICCR.bit.SPISWRESET=0;     // Reset SPI
 
-   SpibRegs.SPICCR.all=0x0007;           //8-bit no loopback
+   SpibRegs.SPICCR.all=0x0047;           //8-bit no loopback
 
    SpibRegs.SPICTL.all=0x0006;           //// Enable master mode, normal phase,enable talk, and SPI int disabled.
 
    SpibRegs.SPISTS.all=0x0000;
-   SpibRegs.SPIBRR = 127;                //Baudrate is slow as possible
+   SpibRegs.SPIBRR = 6;                //Baudrate is slow as possible
   //SpiaRegs.SPIBRR=0x0063;              // Baud rate
 
    SpibRegs.SPIFFTX.all=0xC021;          // Enable FIFO's, set TX FIFO level to 1 CHOOSE LEVEL ACCORDING TO APPLICATION
@@ -96,16 +96,20 @@ void MCP2515_spi_init()
 
     EALLOW;
     // SPI Chip Select line
+    GpioDataRegs.GPADAT.bit.GPIO15 = 1;			//ensure CS is high
     GpioCtrlRegs.GPAMUX1.bit.GPIO15 = 0;         // GPIO
     GpioCtrlRegs.GPADIR.bit.GPIO15 = 1;          // output
     GpioCtrlRegs.GPAQSEL1.bit.GPIO15 = 0;        //Synch to SYSCLKOUT only
     GpioCtrlRegs.GPAPUD.bit.GPIO15 = 1;          //disable pull up
+    GpioDataRegs.GPADAT.bit.GPIO15 = 1;			//ensure CS is high
 
     // MCP2515 reset line
+    GpioDataRegs.GPADAT.bit.GPIO11 = 0;
     GpioCtrlRegs.GPAMUX1.bit.GPIO11 = 0;         // GPIO
     GpioCtrlRegs.GPADIR.bit.GPIO11 = 1;          // output
     GpioCtrlRegs.GPAQSEL1.bit.GPIO11 = 0;        //Synch to SYSCLKOUT only
     GpioCtrlRegs.GPAPUD.bit.GPIO11 = 1;          //disable pull up
+    GpioDataRegs.GPADAT.bit.GPIO11 = 0;
 
     // MCP2515 interrupt line
     GpioCtrlRegs.GPAMUX2.bit.GPIO20 = 0;         // GPIO
@@ -124,6 +128,46 @@ void MCP2515_spi_init()
     GpioCtrlRegs.GPBDIR.bit.GPIO32 = 0;          // input
     GpioCtrlRegs.GPBQSEL1.bit.GPIO32 = 0;        //Synch to SYSCLKOUT only
     GpioCtrlRegs.GPBPUD.bit.GPIO32 = 0;          //enable pull up
+
+ /* Enable internal pull-up for the selected pins */
+ // Pull-ups can be enabled or disabled disabled by the user.
+ // This will enable the pullups for the specified pins.
+ // Comment out other unwanted lines.
+
+ //  GpioCtrlRegs.GPAPUD.bit.GPIO12 = 0;     // Enable pull-up on GPIO12 (SPISIMOB)
+     GpioCtrlRegs.GPAPUD.bit.GPIO24 = 0;     // Enable pull-up on GPIO24 (SPISIMOB)
+
+     GpioCtrlRegs.GPAPUD.bit.GPIO13 = 1;     // Enable pull-up on GPIO13 (SPISOMIB)
+ //  GpioCtrlRegs.GPAPUD.bit.GPIO25 = 0;     // Enable pull-up on GPIO25 (SPISOMIB)
+
+     GpioCtrlRegs.GPAPUD.bit.GPIO14 = 0;     // Enable pull-up on GPIO14 (SPICLKB)
+ //  GpioCtrlRegs.GPAPUD.bit.GPIO26 = 0;     // Enable pull-up on GPIO26 (SPICLKB)
+
+ /* Set qualification for selected pins to asynch only */
+ // This will select asynch (no qualification) for the selected pins.
+ // Comment out other unwanted lines.
+
+ //  GpioCtrlRegs.GPAQSEL1.bit.GPIO12 = 3;   // Asynch input GPIO12 (SPISIMOB)
+     GpioCtrlRegs.GPAQSEL2.bit.GPIO24 = 3;   // Asynch input GPIO24 (SPISIMOB)
+
+     GpioCtrlRegs.GPAQSEL1.bit.GPIO13 = 3;   // Asynch input GPIO13 (SPISOMIB)
+ //  GpioCtrlRegs.GPAQSEL2.bit.GPIO25 = 3;   // Asynch input GPIO25 (SPISOMIB)
+
+     GpioCtrlRegs.GPAQSEL1.bit.GPIO14 = 3;   // Asynch input GPIO14 (SPICLKB)
+ //  GpioCtrlRegs.GPAQSEL2.bit.GPIO26 = 3;   // Asynch input GPIO26 (SPICLKB)
+
+ /* Configure SPI-B pins using GPIO regs*/
+ // This specifies which of the possible GPIO pins will be SPI functional pins.
+ // Comment out other unwanted lines.
+
+ //  GpioCtrlRegs.GPAMUX1.bit.GPIO12 = 3;    // Configure GPIO12 as SPISIMOB
+     GpioCtrlRegs.GPAMUX2.bit.GPIO24 = 3;    // Configure GPIO24 as SPISIMOB
+
+     GpioCtrlRegs.GPAMUX1.bit.GPIO13 = 3;    // Configure GPIO13 as SPISOMIB
+ //  GpioCtrlRegs.GPAMUX2.bit.GPIO25 = 3;    // Configure GPIO25 as SPISOMIB
+
+     GpioCtrlRegs.GPAMUX1.bit.GPIO14 = 3;    // Configure GPIO14 as SPICLKB
+ //  GpioCtrlRegs.GPAMUX2.bit.GPIO26 = 3;    // Configure GPIO26 as SPICLKB
     EDIS;
 
 }
