@@ -30,7 +30,10 @@ void SensorCov()
 	SensorCovInit();
 	while (ops.State == STATE_SENSOR_COV)
 	{
+		LatchStruct();
 		SensorCovMeasure();
+	//	UpdateStruct();
+		FillCANData();
 	}
 	SensorCovDeInit();
 }
@@ -172,7 +175,9 @@ void SensorCovMeasure()
     if (isStopWatchComplete(conv_watch) == 1)
 	{
 		//indicate CAN bus A down
-    	ops.Flags.fields.CANA_status = 0;
+    	//ops.Flags.fields.CANA_status = 0;
+    	//todo change back to CAN bus A flag
+    	ops.Flags.fields.Overflow += 1;
 	}
 }
 /*

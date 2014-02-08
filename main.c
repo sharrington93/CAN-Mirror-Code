@@ -8,7 +8,7 @@
 #include "Boot.h"
 #include "all.h"
 
-Uint16 MesgID = 5;
+Uint16 MesgID = 0x30;
 
 int main(void)
 {

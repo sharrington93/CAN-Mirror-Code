@@ -30,17 +30,17 @@ void FillSendCAN(unsigned int Mbox);
 void ClearMailBoxes();
 
 //todo USER: DEFINE IDs and mailboxes for output
-#define COMMAND_ID 		0x1
+#define COMMAND_ID 		0x32
 #define COMMAND_BOX 	0
 
-#define HEARTBEAT_ID 	0x0
+#define HEARTBEAT_ID 	0x31
 #define HEARTBEAT_BOX 	1
 
-#define ADC_ID 			0x2
+#define ADC_ID 			0x102
 #define ADC_BOX 		2
 #define ADC_TRS			TRS2
 
-#define GP_BUTTON_ID 	0x3
+#define GP_BUTTON_ID 	0x103
 #define GP_BUTTON_BOX 	3
 #define GP_BUTTON_TRS	TRS3
 
