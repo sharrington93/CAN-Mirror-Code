@@ -46,7 +46,10 @@ void SensorCovInit()
 
 	//CONFIG GP_BUTTON
 	ConfigGPButton();
-
+	ConfigLED0();
+	ConfigLED1();
+	SETLED0();
+	SETLED1();
 	//clear CAN Queue
 	CANQueueIN = 0;
 	CANQueueOUT = 0;
@@ -78,16 +81,19 @@ void SensorCovMeasure()
 			MCP2515Write(MCP_CANINTF, 0x00);									//clear interrupt
 			if (++CANQueueIN == CANQUEUEDEPTH) CANQueueIN = 0;					//increment with wrap
 			if (CANQueueIN == CANQueueOUT) CANQueueFULL = 1;					//test for full
+			CANQueueEMPTY = 0;													//just got a message, can't be empty
 
 			//reset Stopwatch
 			StopWatchRestart(conv_watch);
 			ops.Flags.fields.CANA_status = 1;									//indicate CAN bus A status
+			CLEARLED0();
 		}
 		else			//CAN Queue overflow do some error stuff
 		{
 			//reset Stopwatch (CAN bus A is still active, even if we overflowed
 			StopWatchRestart(conv_watch);
 			ops.Flags.fields.CANA_status = 1;									//indicate CAN bus A status
+			CLEARLED0();
 
 			//clear MCP2515 receive interrupt, so we don't block future reception
 			MCP2515Write(MCP_CANINTF, 0x00);									//clear interrupt
@@ -152,6 +158,7 @@ void SensorCovMeasure()
 			ECanaRegs.CANTRS.all = ECanaShadow.CANTRS.all;	//set in real registers
 
 			if (++CANQueueOUT == CANQUEUEDEPTH) CANQueueOUT = 0;					//increment with wrap
+			CANQueueFULL = 0;														//just pulled a message, can't be full
 			if (CANQueueIN == CANQueueOUT) CANQueueEMPTY = 1;						//test for empty
 		}
 	}
@@ -176,6 +183,7 @@ void SensorCovMeasure()
 	{
 		//indicate CAN bus A down
     	//ops.Flags.fields.CANA_status = 0;
+    	SETLED0();
     	//todo change back to CAN bus A flag
     	ops.Flags.fields.Overflow += 1;
 	}
@@ -211,7 +219,7 @@ void SensorCovDeInit()
 	//todo USER: SensorCovDeInit()
 	MCP2515_reset(1);				//hold MCP2515 in reset
 	StopStopWatch(conv_watch);
-	CLEARLED0();
-	CLEARLED1();
+	SETLED0();
+	SETLED1();
 	StopStopWatch(mirror_can_watch);
 }
