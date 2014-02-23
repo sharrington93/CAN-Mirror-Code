@@ -27,8 +27,8 @@ typedef struct CHANGE_OPS
 //todo User: stopwatch errors
 typedef struct FLAGS
 {
-	char Overflow	 : 8;
-	char Timeout	 : 6;
+	unsigned char Overflow	 : 8;
+	unsigned char Timeout	 : 6;
 	char can_error	 : 1;
 	char CANA_status : 1;
 }flags_struct;

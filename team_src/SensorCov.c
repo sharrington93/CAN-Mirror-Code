@@ -182,9 +182,8 @@ void SensorCovMeasure()
     if (isStopWatchComplete(conv_watch) == 1)
 	{
 		//indicate CAN bus A down
-    	//ops.Flags.fields.CANA_status = 0;
+    	ops.Flags.fields.CANA_status = 0;
     	SETLED0();
-    	//todo change back to CAN bus A flag
     	ops.Flags.fields.Overflow += 1;
 	}
 }
