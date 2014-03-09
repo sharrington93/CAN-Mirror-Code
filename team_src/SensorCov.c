@@ -120,7 +120,8 @@ void SensorCovMeasure()
 				ECanaShadow.CANME.bit.ME4 = 0;
 				ECanaRegs.CANME.all = ECanaShadow.CANME.all;	//disable mailbox so we can change the ID
 
-				//message ID is bit 31 = EXID, bit 30,29 = acceptance bits, 0 for transmit, 28:0 ID, ID is left aligned
+				//message ID is: bit 31 = EXID, bit 30,29 = acceptance bits, 0 for transmit, 28:0 ID, ID is left aligned
+				ECanaMboxes.MBOX4.MSGID.all = 0;
 				if (CANQueue_raw[CANQueueOUT][1] & 0x0008)
 				{//extended ID
 					ECanaMboxes.MBOX4.MSGID.all = (0x80000000L | (CANQueue_raw[CANQueueOUT][1] & 0x00000003L) << 27 | (CANQueue_raw[CANQueueOUT][2] & 0x000000FFL) << 19 | (CANQueue_raw[CANQueueOUT][3] & 0x000000FFL) << 10 | (CANQueue_raw[CANQueueOUT][0] & 0x000000FFL) << 3 | (CANQueue_raw[CANQueueOUT][1] & 0x000000E0L) >> 5);
