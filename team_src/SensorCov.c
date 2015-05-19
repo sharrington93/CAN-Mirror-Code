@@ -10,20 +10,30 @@
 #include "MCP2515.h"		//MCP2515 functions
 #include "MCP2515_DEFS.h"
 
-#define CANQUEUEDEPTH 10
-
 stopwatch_struct* mirror_can_watch;
 
 ops_struct ops_temp;
 data_struct data_temp;
 stopwatch_struct* conv_watch;
 
-//variables for the CAN message queue
+//variables for the A->2 CAN message queue
 int CANQueueIN = 0;
 int CANQueueOUT = 0;
 int CANQueueFULL = 0;
 int CANQueueEMPTY = 1;
 unsigned int CANQueue_raw[CANQUEUEDEPTH][13];
+
+//variables for the 2->A CAN message queue
+int CANQueueIN2 = 0;
+int CANQueueOUT2 = 0;
+int CANQueueFULL2 = 0;
+int CANQueueEMPTY2 = 1;
+int MCP2515Send_State=0;
+int MCP2515Send_Timeout=0;
+int tmp;
+
+unsigned int CANQueue_raw2[CANQUEUEDEPTH][13];
+
 
 void SensorCov()
 {
@@ -50,11 +60,19 @@ void SensorCovInit()
 	ConfigLED1();
 	SETLED0();
 	SETLED1();
-	//clear CAN Queue
+	//clear A->2 CAN Queue
 	CANQueueIN = 0;
 	CANQueueOUT = 0;
 	CANQueueFULL = 0;
 	CANQueueEMPTY = 1;
+
+	//clear 2->A CAN Queue
+	CANQueueIN2 = 0;
+	CANQueueOUT2 = 0;
+	CANQueueFULL2 = 0;
+	CANQueueEMPTY2 = 1;
+	MCP2515Send_State = 0;
+	MCP2515Send_Timeout = 0;
 
 	mirror_can_watch = StartStopWatch(100);		//start stopwatch for timeout
 	conv_watch = StartStopWatch(50000);
@@ -101,6 +119,39 @@ void SensorCovMeasure()
 			//increment overflow counter in ops
 			ops.Flags.fields.Overflow += 1;
 		}
+
+	//This code takes care of sending messages out on CAN A
+	if (CANQueueEMPTY2 != 0)									//check if there are messages to send
+	{
+		switch(MCP2515Send_State)						//state machine inlines MCP2515SendMessage so sending messages doesn't block execution
+		{
+		case 0:	//idle, ready to send
+			SR2_SPI(MCP_WRITE, MCP_TXB0SIDH, 5+CANQueue_raw2[CANQueueIN2][4], &CANQueue_raw2[CANQueueIN2][0]);	//write values to TX buffer
+			MCP2515Write(MCP_TXB0CTRL,0x0B);																	//flag message for sending
+			MCP2515Send_State = 1;																				//go to waiting
+			MCP2515Send_Timeout = 0;
+			break;
+		case 1: //waiting for send to complete
+			tmp = (0x78 & MCP2515Read(MCP_TXB0CTRL));		//check status of message
+			if (tmp == 0x00){
+				MCP2515Send_State = 0;						//send successful
+				//remove message from queue
+				if (++CANQueueOUT2 == CANQUEUEDEPTH) CANQueueOUT2 = 0;					//increment with wrap
+				CANQueueFULL2 = 0;														//just pulled a message, can't be full
+				if (CANQueueIN2 == CANQueueOUT2) CANQueueEMPTY2 = 1;					//test for empty
+			}
+			else if (++MCP2515Send_Timeout == CANASENDTIMEOUT)
+				MCP2515Send_State = 2;						//timeout error
+			else
+				MCP2515Send_State = 1;						//keep waiting
+			break;
+		default: //message send timeout, flag error
+			//Todo cleanup MCP2515 send buffers, etc.
+			//TOdo flag some sort of error counter
+			MCP2515Send_State = 0;
+			break;
+		}
+	}
 
 	//This code takes care of sending messages out on CAN bus 2
 	ECanaShadow.CANTRS.all = ECanaRegs.CANTRS.all;			//get CAN transmit status register

@@ -29,6 +29,11 @@ void FillCANData();
 void FillSendCAN(unsigned int Mbox);
 void ClearMailBoxes();
 
+//CAN Mirror defines
+#define CANQUEUEDEPTH 10
+#define CANASENDTIMEOUT 5000
+
+
 //todo USER: DEFINE IDs and mailboxes for output
 #define COMMAND_ID 		0x32
 #define COMMAND_BOX 	0
@@ -43,5 +48,10 @@ void ClearMailBoxes();
 #define GP_BUTTON_ID 	0x103
 #define GP_BUTTON_BOX 	3
 #define GP_BUTTON_TRS	TRS3
+
+#define BIM_LISTEN_ID 	0x103
+#define BIM_LISTEN_BOX 	5
+#define BIM_LISTEN_TRS	TRS5
+
 
 #endif /* CAN_H_ */

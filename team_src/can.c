@@ -6,6 +6,13 @@
  */
 #include "all.h"
 
+//variables for the 2->A CAN message queue
+extern int CANQueueIN2;
+extern int CANQueueOUT2;
+extern int CANQueueFULL2;
+extern int CANQueueEMPTY2;
+extern unsigned int CANQueue_raw2[CANQUEUEDEPTH][13];
+
 unsigned int mask;
 stopwatch_struct* can_watch;
 struct ECAN_REGS ECanaShadow;
@@ -72,6 +79,17 @@ void CANSetup()
 	ECanaMboxes.MBOX3.MSGID.bit.STDMSGID = GP_BUTTON_ID;
 	ECanaShadow.CANMD.bit.MD3 = 0; 			//transmit
 	ECanaShadow.CANME.bit.ME3 = 1;			//enable
+
+	//BIM status receive(use 5 because 4 is used by the CAN mirror function)
+	ECanaMboxes.MBOX5.MSGID.bit.IDE = 0; 	//standard id
+	ECanaMboxes.MBOX5.MSGID.bit.AME = 0;	// all bit must match
+	ECanaMboxes.MBOX5.MSGID.bit.AAM = 0; 	// no RTR AUTO TRANSMIT
+	ECanaMboxes.MBOX5.MSGCTRL.bit.DLC = 8;
+	ECanaMboxes.MBOX5.MSGID.bit.STDMSGID = BIM_LISTEN_ID;
+	ECanaShadow.CANMD.bit.MD5 = 1;			//receive
+	ECanaShadow.CANME.bit.ME5 = 1;			//enable
+	ECanaShadow.CANMIM.bit.MIM5  = 1; 		//int enable
+	ECanaShadow.CANMIL.bit.MIL5  = 1;  		// Int.-Level MB#0  -> I1EN
 
 
 	ECanaRegs.CANGAM.all = ECanaShadow.CANGAM.all;
@@ -257,8 +275,10 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
   	ECanaShadow.CANGIF1.bit.MIV1 =  ECanaRegs.CANGIF1.bit.MIV1;
   	mailbox_nr = ECanaShadow.CANGIF1.bit.MIV1;
   	//todo USER: Setup ops command
-  	if(mailbox_nr == COMMAND_BOX)
+
+  	switch(mailbox_nr)
   	{
+  	case COMMAND_BOX:
   		//todo Nathan: Define Command frame
   		//proposed:
   		//HIGH 4 BYTES = Uint32 ID
@@ -277,6 +297,30 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 			break;
 		}
 		ECanaRegs.CANRMP.bit.RMP0 = 1;
+	break;
+
+	case BIM_LISTEN_BOX:
+		if(CANQueueFULL2 == 0)
+		{
+			//Todo copy all CAN message data into CANQueue_raw2[CANQueueIN2][0]
+			//raw message format is: raw[0] = 10:3 of SID
+			//						 raw[1] = {2:0 of sid}{X,EXIDE,X}{17:16 of EID}
+			//						 raw[2] = 15:8 of EID
+			//						 raw[3] = 7:0 of EID
+			//						 raw[4] = {X,RTR,X,X}{3:0 of DLC}
+			//						 raw[5]-raw[12] = Data bytes
+
+			//update queue
+			if (++CANQueueIN2 == CANQUEUEDEPTH) CANQueueIN2 = 0;				//increment with wrap
+			if (CANQueueIN2 == CANQueueOUT2) CANQueueFULL2 = 1;					//test for full
+			CANQueueEMPTY2 = 0;													//just got a message, can't be empty
+		}
+		else	//overflow error, do some flagging or something
+		{
+
+		}
+		ECanaRegs.CANRMP.bit.RMP5 = 1;
+	break;
   	}
   	//todo USER: Setup other reads
 

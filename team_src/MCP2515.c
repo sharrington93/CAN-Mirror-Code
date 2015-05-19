@@ -33,18 +33,18 @@ int MCP2515SendMessage(unsigned int ID, unsigned long ExtID, unsigned int DataL,
 {
 	int i;
 	int tmp;
-	MCP2515LoadTx(0, ID, ExtID, DataL, Data);						//load tx buffer
+	MCP2515LoadTx(0, ID, ExtID, DataL, Data);					//load tx buffer
 	MCP2515Write(MCP_TXB0CTRL,0x0B);							//flag message for sending
-	i=0;											//basic timeout. would be better to use a system tick
+	i=0;														//basic timeout. would be better to use a system tick
 	do
 	{
-		tmp = (0x78 & MCP2515Read(MCP_TXB0CTRL));					//check status of message
-		if (tmp == 0x00) return 0;							//success
+		tmp = (0x78 & MCP2515Read(MCP_TXB0CTRL));				//check status of message
+		if (tmp == 0x00) return 0;								//success
 		i++;
 	}
 	while(i < 5000);
 
-	MCP2515Write(MCP_TXB0CTRL,0x00);					//clear message send flag
+	MCP2515Write(MCP_TXB0CTRL,0x00);							//clear message send flag
 	return 1;
 }
 
@@ -276,14 +276,14 @@ void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned
 	unsigned int i;
 	unsigned int buf[13];					//buffer for all the possible bytes in the transmit buffer
 
-	buf[0] = ((sid >> 3) & 0xFF);		//first reg is bits 10:3 of SID
-	buf[1] = ((sid & 0x07) << 5);		//put sid 2:0 in buf[1] 7:5
+	buf[0] = ((sid >> 3) & 0xFF);			//first reg is bits 10:3 of SID
+	buf[1] = ((sid & 0x07) << 5);			//put sid 2:0 in buf[1] 7:5
 	buf[1] |= ((sid & 0x8000) >> 12);		//sid:16 is EXIDE flag
 	buf[1] |= ((eid & 0x00030000 ) >> 16);	//sid1:0 are eid 17:16
 	buf[2] = ((eid >> 8) & 0xFF);
 	buf[3] = (eid & 0xFF);
-	buf[4] = dl & 0x0F;			//data length
-	for(i=0;i<dl;i++)				//data bytes
+	buf[4] = dl & 0x0F;						//data length
+	for(i=0;i<dl;i++)						//data bytes
 		buf[5+i] = data[i];
 
 	switch(n)
