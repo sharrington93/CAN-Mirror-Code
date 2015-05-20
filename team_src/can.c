@@ -8,14 +8,12 @@
 
 
 //variables for the 2->A CAN message queue
-extern int CANQueueIN2;
-extern int CANQueueOUT2;
-extern int CANQueueFULL2;
-extern int CANQueueEMPTY2;
-extern unsigned int CANQueue_raw2[CANQUEUEDEPTH][13];
+extern buffer_struct Buf_2toA;
 
+int Buffer_FillMessage(buffer_struct* buf, unsigned int sid, unsigned long eid, unsigned int dl, Uint32 dataH, Uint32 dataL);
 
 unsigned int mask;
+
 stopwatch_struct* can_watch;
 struct ECAN_REGS ECanaShadow;
 
@@ -464,6 +462,8 @@ char FillCAN(unsigned int Mbox)
 		ECanaMboxes.MBOX1.MDH.all = 0;
 		ECanaMboxes.MBOX1.MDL.all = 0;
 		ECanaMboxes.MBOX1.MDL.word.LOW_WORD = ops.Flags.all;
+		ECanaMboxes.MBOX1.MDL.word.HI_WORD = ops.Flags2.all;
+		ECanaMboxes.MBOX1.MDH.word.LOW_WORD = ops.Counters.all;
 		ECanaShadow.CANMC.bit.MBNR = 0;
 		ECanaShadow.CANMC.bit.CDR = 0;
 		ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;
@@ -523,7 +523,7 @@ void SendCAN(unsigned int Mbox)
 	{
 		ops.Flags.fields.can_error = 1;
 	}
-	else if (ops.Flags.fields.can_error == 1)		//if no stopwatch and flagged reset
+	else if (ops.Flags.fields.can_error == 1)					//if no stopwatch and flagged reset
 	{
 		ops.Flags.fields.can_error = 0;
 	}
@@ -542,8 +542,9 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 {
 	Uint32 ops_id;
 	Uint32 dummy;
-
-	Uint32 canSID, canHighBytes, canLowBytes;
+	int tmp;
+	Uint32 canHighBytes, canLowBytes;
+	unsigned int canSID;
 
   	unsigned int mailbox_nr;
   	ECanaShadow.CANGIF1.bit.MIV1 =  ECanaRegs.CANGIF1.bit.MIV1;
@@ -727,45 +728,48 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
   	}
 
   	if(mailbox_nr >= CELL_TEMP1_BOX && mailbox_nr <= BIM_STAT5_BOX)
-  		if(CANQueueFULL2 == 0)
-			{
-				//Todo copy all CAN message data into CANQueue_raw2[CANQueueIN2][0]
-				//raw message format is: raw[0] = 10:3 of SID
-				//						 raw[1] = {2:0 of sid}{X,EXIDE,X}{17:16 of EID}
-				//						 raw[2] = 15:8 of EID
-				//						 raw[3] = 7:0 of EID
-				//						 raw[4] = {X,RTR,X,X}{3:0 of DLC}
-				//						 raw[5]-raw[12] = Data bytes
+  	{
+  		tmp = Buffer_FillMessage(&Buf_2toA, canSID, 0, 8, canHighBytes, canLowBytes);
+  	}
+  		if(tmp != -1)
+  			ops.Counters.fields.Buf2toA = tmp; //keep count up to date
+  		else
+  			ops.Flags2.fields.Overflow += 1; //increment can 2->A overflow counter
 
-				//update queue
-
-  				CANQueue_raw2[CANQueueIN2][0] = (canSID>>3) & 0x000000FFL;				//bits 10:3 shifted to bits 7:0
-  				CANQueue_raw2[CANQueueIN2][1] = (canSID<<5) & 0x000000FFL;				//bits 2:0 shifted to bits 7:5
-  				CANQueue_raw2[CANQueueIN2][2] = 0;										//EXID is always 0
-  				CANQueue_raw2[CANQueueIN2][3] = 0;										//EXID is always 0
-  				CANQueue_raw2[CANQueueIN2][4] = 0x08;									//Always have 8 data bytes
-
-  				CANQueue_raw2[CANQueueIN2][5] = (canLowBytes & 0x000000FFL);
-  				CANQueue_raw2[CANQueueIN2][6] = (canLowBytes >> 8 & 0x000000FFL);
-  				CANQueue_raw2[CANQueueIN2][7] = (canLowBytes >> 16 & 0x000000FFL);
-  				CANQueue_raw2[CANQueueIN2][8] = (canLowBytes >> 24 & 0x000000FFL);
-  				CANQueue_raw2[CANQueueIN2][9] = (canHighBytes & 0x000000FFL);
-  				CANQueue_raw2[CANQueueIN2][10] = (canHighBytes >> 8 & 0x000000FFL);
-  				CANQueue_raw2[CANQueueIN2][11] = (canHighBytes >> 16 & 0x000000FFL);
-  				CANQueue_raw2[CANQueueIN2][12] = (canHighBytes >> 24 & 0x000000FFL);
-
-  				if (++CANQueueIN2 == CANQUEUEDEPTH) CANQueueIN2 = 0;				//increment with wrap
-				if (CANQueueIN2 == CANQueueOUT2) CANQueueFULL2 = 1;					//test for full
-				CANQueueEMPTY2 = 0;													//just got a message, can't be empty
-			}
-			else	//overflow error, do some flagging or something
-			{
-
-			}
-
-  	//todo USER: Setup other reads
 
   	//To receive more interrupts from this PIE group, acknowledge this interrupt
   	PieCtrlRegs.PIEACK.all = PIEACK_GROUP9;
 }
 
+int Buffer_FillMessage(buffer_struct* buf, unsigned int sid, unsigned long eid, unsigned int dl, Uint32 dataH, Uint32 dataL)
+{// fills a buf with a message from the arguments. Returns number of messages in buffer after write, or -1 on overflow
+
+	if(buf->full == 0)
+	{
+		buf->buf[buf->in][0] = ((sid >> 3) & 0xFF);				//first reg is bits 10:3 of SID
+		buf->buf[buf->in][1] = ((sid & 0x07) << 5);				//put sid 2:0 in buf[1] 7:5
+		buf->buf[buf->in][1] |= ((sid & 0x8000) >> 12);			//sid:16 is EXIDE flag
+		buf->buf[buf->in][1] |= ((eid & 0x00030000 ) >> 16);	//sid1:0 are eid 17:16
+		buf->buf[buf->in][2] = ((eid >> 8) & 0xFF);
+		buf->buf[buf->in][3] = (eid & 0xFF);
+		buf->buf[buf->in][4] = dl & 0x0F;						//data length
+		buf->buf[buf->in][5] = (dataL & 0x000000FFL);
+		buf->buf[buf->in][6] = (dataL & 0x0000FF00L) >> 8;
+		buf->buf[buf->in][7] = (dataL & 0x00FF0000L) >> 16;
+		buf->buf[buf->in][8] = (dataL & 0xFF000000L) >> 24;
+		buf->buf[buf->in][9] = (dataH & 0x000000FFL);
+		buf->buf[buf->in][10] = (dataH & 0x0000FF00L) >> 8;
+		buf->buf[buf->in][11] = (dataH & 0x00FF0000L) >> 16;
+		buf->buf[buf->in][12] = (dataH & 0xFF000000L) >> 24;
+
+		if (++buf->in == CANQUEUEDEPTH) buf->in = 0;					//increment write pointer with wrap
+		if (buf->in == buf->out) buf->full = 1;							//test for full
+		buf->empty = 0;													//just wrote, can't be empty
+		buf->count +=1;													//increment counter
+		return buf->count;
+	}
+	else
+	{
+		return -1;
+	}
+}

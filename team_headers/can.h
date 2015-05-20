@@ -29,11 +29,6 @@ void FillCANData();
 void FillSendCAN(unsigned int Mbox);
 void ClearMailBoxes();
 
-//CAN Mirror defines
-#define CANQUEUEDEPTH 25
-#define CANASENDTIMEOUT 5000
-
-
 //todo USER: DEFINE IDs and mailboxes for output
 #define COMMAND_ID 		0x32
 #define COMMAND_BOX 	0

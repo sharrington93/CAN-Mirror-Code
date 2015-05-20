@@ -10,30 +10,27 @@
 #include "MCP2515.h"		//MCP2515 functions
 #include "MCP2515_DEFS.h"
 
-stopwatch_struct* mirror_can_watch;
+void MCP2515_Total_Reset(long delay);								//does a total reset of the MCP2515 system. stays off bus for delay before coming back on line.
+
+
+stopwatch_struct* mirror_Ato2_watch;
+stopwatch_struct* mirror_2toA_watch;
+stopwatch_struct* canA_watch;
+stopwatch_struct* can2_watch;
+
 
 ops_struct ops_temp;
 data_struct data_temp;
-stopwatch_struct* conv_watch;
 
-//variables for the A->2 CAN message queue
-int CANQueueIN = 0;
-int CANQueueOUT = 0;
-int CANQueueFULL = 0;
-int CANQueueEMPTY = 1;
-unsigned int CANQueue_raw[CANQUEUEDEPTH][13];
+//buffers
+buffer_struct Buf_Ato2;
+buffer_struct Buf_2toA;
 
+int MCP2515_Send_State = 0;
+int MCP2515_Receive_State = 0;
+int MCP2515_Error_State = 0;
 
-//variables for the 2->A CAN message queue
-int CANQueueIN2 = 0;
-int CANQueueOUT2 = 0;
-int CANQueueFULL2 = 0;
-int CANQueueEMPTY2 = 1;
-int MCP2515Send_State=0;
-int MCP2515Send_Timeout=0;
-int tmp;
-unsigned int CANQueue_raw2[CANQUEUEDEPTH][13];
-
+unsigned int MCP_ShadowRegs[4];									//shadow registers for CANINTF, EFLG, CANSTAT, CANCTRL
 
 void SensorCov()
 {
@@ -50,32 +47,19 @@ void SensorCov()
 
 void SensorCovInit()
 {
-
-	MCP2515_spi_init();								//initialize SPI port and GPIO associated with the MCP2515
-	PgmInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515
-
 	//CONFIG GP_BUTTON
 	ConfigGPButton();
 	ConfigLED0();
 	ConfigLED1();
 	SETLED0();
 	SETLED1();
-	//clear A->2 CAN Queue
-	CANQueueIN = 0;
-	CANQueueOUT = 0;
-	CANQueueFULL = 0;
-	CANQueueEMPTY = 1;
 
-	//clear 2->A CAN Queue
-	CANQueueIN2 = 0;
-	CANQueueOUT2 = 0;
-	CANQueueFULL2 = 0;
-	CANQueueEMPTY2 = 1;
-	MCP2515Send_State = 0;
-	MCP2515Send_Timeout = 0;
+	MCP2515_Total_Reset(0);
 
-	mirror_can_watch = StartStopWatch(100);		//start stopwatch for timeout
-	conv_watch = StartStopWatch(50000);
+	mirror_Ato2_watch = StartStopWatch(100);		//start stopwatch for Ato2 timeout
+	mirror_2toA_watch = StartStopWatch(100);    	//start stopwatch for 2toA timeout
+	canA_watch = StartStopWatch(50000);				//start stopwatch for canA bus status
+	can2_watch = StartStopWatch(50000);				//start stopwatch for can2 bus status
 }
 
 
@@ -88,78 +72,169 @@ void LatchStruct()
 
 void SensorCovMeasure()
 {
+	int tmp;
 	struct ECAN_REGS ECanaShadow;	//shadow structure for modifying CAN registers
 
-	//this code takes care of getting messages from the MCP2515
+//*********************************************************************MCP2515 service*******************************************************************************************
+
+	//MCP2515 interrupt handler
 	if(GpioDataRegs.GPADAT.bit.GPIO20 == 0 ) // poll MCP2515 interrupt pin(active low)
-		if(CANQueueFULL == 0)
-		{
-			//read CAN message from MCP2515
-			SR2_SPI(MCP_READ, MCP_RXB0SIDH, 13, &CANQueue_raw[CANQueueIN][0]);	//read raw can message
-			MCP2515Write(MCP_CANINTF, 0x00);									//clear interrupt
-			if (++CANQueueIN == CANQUEUEDEPTH) CANQueueIN = 0;					//increment with wrap
-			if (CANQueueIN == CANQueueOUT) CANQueueFULL = 1;					//test for full
-			CANQueueEMPTY = 0;													//just got a message, can't be empty
-
-			//reset Stopwatch
-			StopWatchRestart(conv_watch);
-			ops.Flags.fields.CANA_status = 1;									//indicate CAN bus A status
-			CLEARLED0();
-		}
-		else			//CAN Queue overflow do some error stuff
-		{
-			//reset Stopwatch (CAN bus A is still active, even if we overflowed
-			StopWatchRestart(conv_watch);
-			ops.Flags.fields.CANA_status = 1;									//indicate CAN bus A status
-			CLEARLED0();
-
-			//clear MCP2515 receive interrupt, so we don't block future reception
-			MCP2515Write(MCP_CANINTF, 0x00);									//clear interrupt
-
-			//increment overflow counter in ops
-			ops.Flags.fields.Overflow += 1;
-		}
-
-	//This code takes care of sending messages out on CAN A
-	if (CANQueueEMPTY2 == 0)									//check if there are messages to send
 	{
-		switch(MCP2515Send_State)						//state machine inlines MCP2515SendMessage so sending messages doesn't block execution
+		MCP2515ReadBlock(MCP_CANINTF, MCP_ShadowRegs, 2);		//read the status registers
+		//MCP_ShadowRegs[0] = CANINTF
+		//MCP_ShadowRegs[1] = EFLG
+
+		if(MCP_ShadowRegs[0] & MCP_CANINTF_MERRF)
 		{
-		case 0:	//idle, ready to send
-			SR2_SPI(MCP_WRITE, MCP_TXB0SIDH, 5+CANQueue_raw2[CANQueueIN2][4], &CANQueue_raw2[CANQueueIN2][0]);	//write values to TX buffer
-			MCP2515Write(MCP_TXB0CTRL,0x0B);																	//flag message for sending
-			MCP2515Send_State = 1;																				//go to waiting
-			MCP2515Send_Timeout = 0;
-			break;
-		case 1: //waiting for send to complete
-			tmp = (0x78 & MCP2515Read(MCP_TXB0CTRL));		//check status of message
-			if (tmp == 0x00){
-				MCP2515Send_State = 0;						//send successful
-				//remove message from queue
-				if (++CANQueueOUT2 == CANQUEUEDEPTH) CANQueueOUT2 = 0;					//increment with wrap
-				CANQueueFULL2 = 0;														//just pulled a message, can't be full
-				if (CANQueueIN2 == CANQueueOUT2) CANQueueEMPTY2 = 1;					//test for empty
-			}
-			else if (++MCP2515Send_Timeout == CANASENDTIMEOUT)
-				MCP2515Send_State = 2;						//timeout error
-			else
-				MCP2515Send_State = 1;						//keep waiting
-			break;
-		default: //message send timeout, flag error
-			//Todo cleanup MCP2515 send buffers, etc.
-			//TOdo flag some sort of error counter
-			MCP2515Send_State = 1;
-			break;
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_MERRF)); // clear interrupt flag
+			//this catches all message transmit/receive errors
 		}
+
+		if(MCP_ShadowRegs[0] & MCP_CANINTF_WAKIF)
+		{
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_WAKIF)); // clear interrupt flag
+		}
+
+		if(MCP_ShadowRegs[0] & MCP_CANINTF_ERRIF)
+		{
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_ERRIF)); // clear interrupt flag
+			//check EFLG to see what generated the error
+			if(MCP_ShadowRegs[1] & MCP_EFLG_RX1OVR)
+				MCP2515Write(MCP_EFLG, MCP_ShadowRegs[1] | 0x40);	//clear RXB1 overflow error
+			if(MCP_ShadowRegs[1] & MCP_EFLG_RX0OVR);
+				MCP2515Write(MCP_EFLG, MCP_ShadowRegs[1] | 0x80);	//clear RXB0 overflow error
+			if(MCP_ShadowRegs[1] & MCP_EFLG_TXBO);
+			if(MCP_ShadowRegs[1] & MCP_EFLG_TXEP);
+			if(MCP_ShadowRegs[1] & MCP_EFLG_RXEP);
+			if(MCP_ShadowRegs[1] & MCP_EFLG_TXWAR);
+			if(MCP_ShadowRegs[1] & MCP_EFLG_RXWAR);
+			if(MCP_ShadowRegs[1] & MCP_EFLG_EWARN);
+		}
+
+		if(MCP_ShadowRegs[0] & MCP_CANINTF_TX2IF)
+		{
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_TX2IF)); // clear interrupt flag
+		}
+
+		if(MCP_ShadowRegs[0] & MCP_CANINTF_TX1IF)
+		{
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_TX1IF)); // clear interrupt flag
+		}
+
+		if(MCP_ShadowRegs[0] & MCP_CANINTF_TX0IF)
+		{
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_TX0IF)); // clear interrupt flag
+			//This should signal successful transmission
+			if((MCP2515Read(MCP_TXB0CTRL) & 0x78) == 0)					//check for no errors
+				MCP2515_Send_State = 1;
+			else
+				MCP2515_Send_State = 4;
+		}
+
+		if(MCP_ShadowRegs[0] & MCP_CANINTF_RX1IF)
+		{
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_RX1IF)); // clear interrupt flag
+			MCP2515_Receive_State = 2;
+		}
+
+		if(MCP_ShadowRegs[0] & MCP_CANINTF_RX0IF)
+		{
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_RX0IF)); // clear interrupt flag
+			MCP2515_Receive_State = 1;
+		}
+
+	}//end MCP2515 interrupt handler
+
+
+	//Send state machine (sends messages from 2 to A)
+	switch(MCP2515_Send_State)
+	{
+	case 1: // attempt to send
+			tmp = Buffer_MCPFillMessage(&Buf_2toA, 0);	//attempt to add message from buffer
+			if(tmp != -1)								//if add was successful,
+			{
+				ops.Counters.fields.Buf2toA = tmp;		//keep count up to date
+				MCP2515Write(MCP_TXB0CTRL,0x0B);		//flag message for transmission
+				StopWatchRestart(mirror_2toA_watch);	//start timeout counter
+				MCP2515_Send_State = 2;					//go to timeout wait
+			}
+			else
+			{
+				//there were no messages to send
+			}
+		break;
+
+	case 2: // wait for message send timeout, interrupt handler will change state otherwise
+			if(isStopWatchComplete(mirror_2toA_watch) == 1)
+			{
+				//Timeout error for send message on canA
+				MCP2515_Send_State = 3;					//go to abort message
+			}
+		break;
+
+	case 3: //abort message
+			MCP2515Write(MCP_TXB0CTRL, 0x00);				//clear transmit request flag
+			MCP2515_Send_State = 0;
+		break;
+	case 4: //error handler
+		break;
+
+	default: // Waiting state, check if transmitter status is ok.
+			if((MCP2515Read(MCP_TXB0CTRL) & 0x08) == 0)		//check status of transmitter
+				MCP2515_Send_State = 1;						//go to send messages state
+		break;
 	}
 
-	//This code takes care of sending messages out on CAN bus 2
+	//receive state machine (gets messages from A destined for 2)
+	switch(MCP2515_Receive_State)
+	{
+	case 1:	//Get message from RXB0
+		tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
+		if (tmp != -1)
+		{
+			ops.Counters.fields.BufAto2 = tmp;
+		}
+		else
+		{
+			tmp=1;						//todo handle full buffer here
+		}
+
+		MCP2515_Receive_State = 0;		//go back to waiting
+		break;
+	case 2: //Get message from RXB1
+		tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
+		if (tmp != -1)
+		{
+			ops.Counters.fields.BufAto2 = tmp;
+		}
+		else
+		{
+			tmp=1;						//todo handle full buffer here
+		}
+
+		MCP2515_Receive_State = 0;		//go back to waiting
+		break;
+	case 3: //Error handler
+		break;
+	default:
+		//default do nothing Interrupt handler moves state from 0 to something else
+		break;
+	}
+
+	//error state machine
+	switch(MCP2515_Error_State)
+	{
+	}
+
+//*****************************************************************end MCP2515 service********************************************************************************************
+
+//***********************************************This code takes care of sending messages out on CAN bus 2************************************************************************
 	ECanaShadow.CANTRS.all = ECanaRegs.CANTRS.all;			//get CAN transmit status register
 	if ((ECanaShadow.CANTRS.all & (1 << 0x04)) == 0)		//check if mailbox 4 is not sending
 	{
 		if(CANQueueEMPTY == 0)								//check if there are messages to send
 		{
-			StopWatchRestart(mirror_can_watch);				//restart stopwatch for timeout
+			StopWatchRestart(can2_watch);					//restart stopwatch for timeout
 
 			//set up the actual CAN transmission
 			EALLOW;
@@ -212,11 +287,13 @@ void SensorCovMeasure()
 			if (++CANQueueOUT == CANQUEUEDEPTH) CANQueueOUT = 0;					//increment with wrap
 			CANQueueFULL = 0;														//just pulled a message, can't be full
 			if (CANQueueIN == CANQueueOUT) CANQueueEMPTY = 1;						//test for empty
+			CANQueueCount -=1;														//decrement counter
+			ops.Counters.fields.BufAto2 -=1;
 		}
 	}
 	else	//mailbox 4 is sending
 	{
-		if(isStopWatchComplete(mirror_can_watch) == 1)
+		if(isStopWatchComplete(can2_watch) == 1)
 		{
 			//error on CAN send timeout
 			//increment timeout counter and clear mailbox 4
@@ -231,46 +308,43 @@ void SensorCovMeasure()
 		}
 	}
 
-    if (isStopWatchComplete(conv_watch) == 1)
+    if (isStopWatchComplete(canA_watch) == 1)
 	{
 		//indicate CAN bus A down
-    	ops.Flags.fields.CANA_status = 0;
+    	ops.Flags.fields.can_status = 0;
     	SETLED0();
-    	ops.Flags.fields.Overflow += 1;
 	}
 }
-/*
-void UpdateStruct()
-{
-	memcpy(&data, &data_temp, sizeof(struct DATA));
-
-	//todo USER: UpdateStruct
-	//update with node specific op changes
-
-	//if ops is not changed outside of sensor conversion copy temp over, otherwise don't change
-
-	//Change bit is only set by ops changes outside of SensorCov.
-	if (ops.Change.bit.State == 0)
-	{
-		ops.State = ops_temp.State;
-	}
-
-	if (ops.Change.bit.Flags == 0)
-	{
-		//only cov error happens inside of conversion so all other changes are considered correct.
-		//update accordingly to correct cov_errors
-		ops.Flags.bit.cov_error = ops_temp.Flags.bit.cov_error;
-	}
-	ops.Change.all = 0;	//clear change states
-}
-*/
 
 void SensorCovDeInit()
 {
 	//todo USER: SensorCovDeInit()
 	MCP2515_reset(1);				//hold MCP2515 in reset
-	StopStopWatch(conv_watch);
+	StopStopWatch(mirror_Ato2_watch);
+	StopStopWatch(mirror_2toA_watch);
+	StopStopWatch(canA_watch);
+	StopStopWatch(can2_watch);
 	SETLED0();
 	SETLED1();
-	StopStopWatch(mirror_can_watch);
+}
+
+void MCP2515_Total_Reset(long delay)
+{
+
+	MCP2515_spi_init();								//initialize SPI port and GPIO associated with the MCP2515
+	PgmInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515
+
+	Buffer_Clear(&Buf_Ato2);
+	ops.Counters.fields.BufAto2 = 0;
+	ops.Flags.fields.Overflow = 0;
+	ops.Flags.fields.Timeout = 0;
+
+	Buffer_Clear(&Buf_2toA);
+	ops.Counters.fields.Buf2toA = 0;
+	ops.Flags2.fields.Overflow = 0;
+	ops.Flags2.fields.Timeout = 0;
+
+	MCP2515_Send_State = 0;								//MCP2515 state to default
+	MCP2515_Receive_State = 0;
+	MCP2515_Error_State = 0;
 }

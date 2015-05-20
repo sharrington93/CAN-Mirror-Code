@@ -27,11 +27,16 @@ typedef struct CHANGE_OPS
 //todo User: stopwatch errors
 typedef struct FLAGS
 {
-	unsigned char Overflow	 : 8;
-	unsigned char Timeout	 : 6;
-	char can_error	 : 1;
-	char CANA_status : 1;
+	unsigned char Read_Overflow	 : 8;
+	unsigned char Write_Timeout	 : 7;
+	char Status : 1;
 }flags_struct;
+
+typedef struct COUNTERS
+{
+	unsigned char Buf2toA	 : 8;
+	unsigned char BufAto2	 : 8;
+}count_struct;
 
 typedef struct OPERATIONS
 {
@@ -40,7 +45,13 @@ typedef struct OPERATIONS
   {
 	  long						all;
 	  flags_struct 				fields;
-  }								Flags;
+  } canA, can2;
+
+  union count
+  {
+	  long						all;
+	  count_struct				fields;
+  } Counters;
   union CHANGE
   {
   	long 			all;
