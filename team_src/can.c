@@ -6,12 +6,14 @@
  */
 #include "all.h"
 
+/*
 //variables for the 2->A CAN message queue
 extern int CANQueueIN2;
 extern int CANQueueOUT2;
 extern int CANQueueFULL2;
 extern int CANQueueEMPTY2;
 extern unsigned int CANQueue_raw2[CANQUEUEDEPTH][13];
+*/
 
 unsigned int mask;
 stopwatch_struct* can_watch;
@@ -81,7 +83,7 @@ void CANSetup()
 	ECanaShadow.CANME.bit.ME3 = 1;			//enable
 
 	//Mailbox 4 used by CAN mirror to send A traffic on 2
-
+/*
 	//Cell Temp 1 receive
 	ECanaMboxes.MBOX5.MSGID.bit.IDE = 0; 	//standard id
 	ECanaMboxes.MBOX5.MSGID.bit.AME = 0;	// all bit must match
@@ -356,6 +358,8 @@ void CANSetup()
 	ECanaShadow.CANME.bit.ME29 = 1;			//enable
 	ECanaShadow.CANMIM.bit.MIM29  = 1; 		//int enable
 	ECanaShadow.CANMIL.bit.MIL29  = 1;  		// Int.-Level MB#0  -> I1EN
+*/
+
 
 	ECanaRegs.CANGAM.all = ECanaShadow.CANGAM.all;
 	ECanaRegs.CANGIM.all = ECanaShadow.CANGIM.all;
@@ -365,7 +369,7 @@ void CANSetup()
 	ECanaRegs.CANME.all = ECanaShadow.CANME.all;
     ECanaShadow.CANMC.all = ECanaRegs.CANMC.all;
     ECanaShadow.CANMC.bit.STM = 0;    // No self-test mode
-    ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;
+	ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;
     EDIS;
 
     //ENABLE PIE INTERRUPTS
@@ -536,7 +540,9 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 {
 	Uint32 ops_id;
 	Uint32 dummy;
+/*
 	Uint32 canSID, canHighBytes, canLowBytes;
+ */
   	unsigned int mailbox_nr;
   	ECanaShadow.CANGIF1.bit.MIV1 =  ECanaRegs.CANGIF1.bit.MIV1;
   	mailbox_nr = ECanaShadow.CANGIF1.bit.MIV1;
@@ -564,7 +570,7 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 		}
 		ECanaRegs.CANRMP.bit.RMP0 = 1;
 	break;
-
+/*
 	case CELL_TEMP1_BOX:
 		canSID = CELL_TEMP1_ID;
 		canHighBytes = ECanaMboxes.MBOX5.MDH.all;
@@ -715,7 +721,9 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 		canLowBytes = ECanaMboxes.MBOX29.MDL.all;
 		ECanaRegs.CANRMP.bit.RMP29 = 1;
 		break;
+*/
   	}
+/*
   	if(mailbox_nr >= CELL_TEMP1_BOX && mailbox_nr <= BIM_STAT5_BOX)
   		if(CANQueueFULL2 == 0)
 			{
@@ -746,7 +754,7 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 			{
 
 			}
-
+*/
   	//todo USER: Setup other reads
 
   	//To receive more interrupts from this PIE group, acknowledge this interrupt

@@ -23,6 +23,7 @@ int CANQueueFULL = 0;
 int CANQueueEMPTY = 1;
 unsigned int CANQueue_raw[CANQUEUEDEPTH][13];
 
+/*
 //variables for the 2->A CAN message queue
 int CANQueueIN2 = 0;
 int CANQueueOUT2 = 0;
@@ -33,7 +34,7 @@ int MCP2515Send_Timeout=0;
 int tmp;
 
 unsigned int CANQueue_raw2[CANQUEUEDEPTH][13];
-
+*/
 
 void SensorCov()
 {
@@ -65,7 +66,7 @@ void SensorCovInit()
 	CANQueueOUT = 0;
 	CANQueueFULL = 0;
 	CANQueueEMPTY = 1;
-
+/*
 	//clear 2->A CAN Queue
 	CANQueueIN2 = 0;
 	CANQueueOUT2 = 0;
@@ -73,7 +74,7 @@ void SensorCovInit()
 	CANQueueEMPTY2 = 1;
 	MCP2515Send_State = 0;
 	MCP2515Send_Timeout = 0;
-
+*/
 	mirror_can_watch = StartStopWatch(100);		//start stopwatch for timeout
 	conv_watch = StartStopWatch(50000);
 }
@@ -119,7 +120,7 @@ void SensorCovMeasure()
 			//increment overflow counter in ops
 			ops.Flags.fields.Overflow += 1;
 		}
-
+/*
 	//This code takes care of sending messages out on CAN A
 	if (CANQueueEMPTY2 != 0)									//check if there are messages to send
 	{
@@ -152,7 +153,7 @@ void SensorCovMeasure()
 			break;
 		}
 	}
-
+*/
 	//This code takes care of sending messages out on CAN bus 2
 	ECanaShadow.CANTRS.all = ECanaRegs.CANTRS.all;			//get CAN transmit status register
 	if ((ECanaShadow.CANTRS.all & (1 << 0x04)) == 0)		//check if mailbox 4 is not sending
