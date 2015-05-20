@@ -50,7 +50,7 @@ void ClearMailBoxes();
 #define GP_BUTTON_TRS	TRS3
 
 //messages to mirror to CAN A
-/*
+
 #define CELL_TEMP1_ID 	0x32C
 #define CELL_TEMP1_BOX 	5
 
@@ -125,6 +125,6 @@ void ClearMailBoxes();
 
 #define BIM_STAT5_ID 	0x344
 #define BIM_STAT5_BOX 	29
-*/
+
 
 #endif /* CAN_H_ */
