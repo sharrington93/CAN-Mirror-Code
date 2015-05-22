@@ -29,7 +29,8 @@ void OperationsSetup()
 	//todo USER: OperationsSetup()
 	//add here and ops.h
 	ops.Change.all = 0;
-	ops.Flags.all = 0;
+	ops.can2toA.all = 0;
+	ops.canAto2.all = 0;
 	ops.State = STATE_SENSOR_COV;
 }
 

@@ -461,9 +461,8 @@ char FillCAN(unsigned int Mbox)
 		ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;
 		ECanaMboxes.MBOX1.MDH.all = 0;
 		ECanaMboxes.MBOX1.MDL.all = 0;
-		ECanaMboxes.MBOX1.MDL.word.LOW_WORD = ops.Flags.all;
-		ECanaMboxes.MBOX1.MDL.word.HI_WORD = ops.Flags2.all;
-		ECanaMboxes.MBOX1.MDH.word.LOW_WORD = ops.Counters.all;
+		ECanaMboxes.MBOX1.MDL.all = ops.can2toA.all;
+		ECanaMboxes.MBOX1.MDH.all = ops.canAto2.all;
 		ECanaShadow.CANMC.bit.MBNR = 0;
 		ECanaShadow.CANMC.bit.CDR = 0;
 		ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;
@@ -521,11 +520,11 @@ void SendCAN(unsigned int Mbox)
 	ECanaRegs.CANTA.all = mask;									//clear flag
 	if (isStopWatchComplete(can_watch) == 1)					//if stopwatch flag
 	{
-		ops.Flags.fields.can_error = 1;
+		ops.can2toA.fields.can_error = 1;
 	}
-	else if (ops.Flags.fields.can_error == 1)					//if no stopwatch and flagged reset
+	else if (ops.can2toA.fields.can_error == 1)					//if no stopwatch and flagged reset
 	{
-		ops.Flags.fields.can_error = 0;
+		ops.can2toA.fields.can_error = 0;
 	}
 }
 
@@ -540,8 +539,6 @@ void FillCANData()
 // INT9.6
 __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 {
-	Uint32 ops_id;
-	Uint32 dummy;
 	int tmp;
 	Uint32 canHighBytes, canLowBytes;
 	unsigned int canSID;
@@ -558,19 +555,6 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
   		//proposed:
   		//HIGH 4 BYTES = Uint32 ID
   		//LOW 4 BYTES = Uint32 change to
-  		ops_id = ECanaMboxes.MBOX0.MDH.all;
-  		dummy = ECanaMboxes.MBOX0.MDL.all;
-		switch (ops_id)
-		{
-		case OPS_ID_STATE:
-			memcpy(&ops.State,&dummy,sizeof ops.State);
-			ops.Change.bit.State = 1;
-			break;
-		case OPS_ID_STOPWATCHERROR:
-			memcpy(&ops.Flags.all,&dummy,sizeof ops.Flags.all);
-			ops.Change.bit.Flags = 1;
-			break;
-		}
 		ECanaRegs.CANRMP.bit.RMP0 = 1;
 	break;
 
@@ -732,9 +716,9 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
   		tmp = Buffer_FillMessage(&Buf_2toA, canSID, 0, 8, canHighBytes, canLowBytes);
   	}
   		if(tmp != -1)
-  			ops.Counters.fields.Buf2toA = tmp; //keep count up to date
+  			ops.can2toA.fields.Buffer_level = tmp; //keep count up to date
   		else
-  			ops.Flags2.fields.Overflow += 1; //increment can 2->A overflow counter
+  			ops.can2toA.fields.Buffer_Overflows += 1; //increment can 2->A overflow counter
 
 
   	//To receive more interrupts from this PIE group, acknowledge this interrupt
@@ -772,4 +756,15 @@ int Buffer_FillMessage(buffer_struct* buf, unsigned int sid, unsigned long eid, 
 	{
 		return -1;
 	}
+}
+
+//interrupt for MCP2515
+// INT1.4
+__interrupt void  XINT1_ISR(void)
+{
+	int tmp;
+	// Insert ISR Code here
+	tmp = 1;
+	// To receive more interrupts from this PIE group, acknowledge this interrupt
+	PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
 }

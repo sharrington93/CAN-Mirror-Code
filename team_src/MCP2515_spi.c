@@ -76,7 +76,7 @@ void MCP2515_spi_init()
    SpibRegs.SPICTL.all=0x0006;           //// Enable master mode, normal phase,enable talk, and SPI int disabled.
 
    SpibRegs.SPISTS.all=0x0000;
-   SpibRegs.SPIBRR = 6;                //Baudrate is slow as possible
+   SpibRegs.SPIBRR = 6;                	 //Baudrate is slow as possible
   //SpiaRegs.SPIBRR=0x0063;              // Baud rate
 
    SpibRegs.SPIFFTX.all=0xC021;          // Enable FIFO's, set TX FIFO level to 1 CHOOSE LEVEL ACCORDING TO APPLICATION

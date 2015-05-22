@@ -7,7 +7,7 @@
 
 #include "all.h"
 
-extern stopwatch_struct* mirror_can_watch;
+extern stopwatch_struct* mirror_Ato2_watch;
 
 int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf);	//sends a CAN message immediately, with timeout
 
@@ -72,13 +72,13 @@ int SendGeneralCANMessage(unsigned int timeout, unsigned int* buf)
 	ECanaShadow.CANTRS.all = 1 << 0x04;				//mark mailbox 4 for transmit
 	ECanaRegs.CANTRS.all = ECanaShadow.CANTRS.all;	//set in real registers
 
-	StopWatchRestart(mirror_can_watch);
+	StopWatchRestart(mirror_Ato2_watch);
 //	mirror_can_watch = StartStopWatch(timeout);		//start stopwatch for timeout
 
 		ECanaShadow.CANTA.all = 1 << 0x04;
 		ECanaRegs.CANTA.all = ECanaShadow.CANTA.all;						//clear flag
 
-		ret = isStopWatchComplete(mirror_can_watch);
+		ret = isStopWatchComplete(mirror_Ato2_watch);
 
 		return ret;
 }

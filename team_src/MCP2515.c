@@ -415,14 +415,15 @@ int Buffer_Write(buffer_struct* buf, unsigned int* data)
 }
 
 int Buffer_Read(buffer_struct* buf, unsigned int* data)
-{//returns number of items left in buffer after read or -1 if an attempt was made to read an empty buffer
+{	//reads 13 byte message from buf into data
+	//returns number of items left in buffer after read or -1 if an attempt was made to read an empty buffer
 	if(buf->empty == 0)
 	{
 		memcpy(data,&buf->buf[buf->out][0], 13*sizeof(unsigned int));	//read data from buffer
 		if (++buf->out == CANQUEUEDEPTH) buf->out = 0;					//increment read pointer with wrap
-		if (buf->in == buf->out) buf->full = 1;							//test for full
-		buf->empty = 0;													//just wrote, can't be empty
-		buf->count +=1;													//increment counter
+		if (buf->in == buf->out) buf->empty = 1;						//test for empty
+		buf->full = 0;													//just read, can't be full
+		buf->count -=1;													//decrement counter
 		return buf->count;
 	}
 	else

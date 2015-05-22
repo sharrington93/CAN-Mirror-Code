@@ -47,6 +47,28 @@ void SensorCov()
 
 void SensorCovInit()
 {
+
+/*
+	//****************config ISR for MCP2515
+
+	// MCP2515 !int is on GPIO20 is XINT1
+	EALLOW;
+	GpioIntRegs.GPIOXINT1SEL.bit.GPIOSEL = 20;   // XINT1 is GPIO20
+	EDIS;
+
+	// Configure XINT1
+	XIntruptRegs.XINT1CR.bit.POLARITY = 0;      // Falling edge interrupt
+
+	// Enable XINT1
+	XIntruptRegs.XINT1CR.bit.ENABLE = 1;        // Enable XINT1
+
+
+	PieCtrlRegs.PIEIER1.bit.INTx4 = 1;          // Enable PIE Group 1 INT4
+	IFR &= ~M_INT1;
+	IER |= M_INT1;
+	//********************
+*/
+
 	//CONFIG GP_BUTTON
 	ConfigGPButton();
 	ConfigLED0();
@@ -74,6 +96,7 @@ void SensorCovMeasure()
 {
 	int tmp;
 	struct ECAN_REGS ECanaShadow;	//shadow structure for modifying CAN registers
+	unsigned int tmp_buffer[13];	//temporary buffer for messages
 
 //*********************************************************************MCP2515 service*******************************************************************************************
 
@@ -86,23 +109,23 @@ void SensorCovMeasure()
 
 		if(MCP_ShadowRegs[0] & MCP_CANINTF_MERRF)
 		{
-			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_MERRF)); // clear interrupt flag
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] & ~MCP_CANINTF_MERRF)); // clear interrupt flag
 			//this catches all message transmit/receive errors
 		}
 
 		if(MCP_ShadowRegs[0] & MCP_CANINTF_WAKIF)
 		{
-			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_WAKIF)); // clear interrupt flag
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] & ~MCP_CANINTF_WAKIF)); // clear interrupt flag
 		}
 
-		if(MCP_ShadowRegs[0] & MCP_CANINTF_ERRIF)
+		if((MCP_ShadowRegs[0] & MCP_CANINTF_ERRIF) | (MCP_ShadowRegs[1] != 0))
 		{
-			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_ERRIF)); // clear interrupt flag
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] & ~MCP_CANINTF_ERRIF)); // clear interrupt flag
 			//check EFLG to see what generated the error
 			if(MCP_ShadowRegs[1] & MCP_EFLG_RX1OVR)
-				MCP2515Write(MCP_EFLG, MCP_ShadowRegs[1] | 0x40);	//clear RXB1 overflow error
+				MCP2515Write(MCP_EFLG, MCP_ShadowRegs[1] & ~MCP_EFLG_RX1OVR);	//clear RXB1 overflow error
 			if(MCP_ShadowRegs[1] & MCP_EFLG_RX0OVR);
-				MCP2515Write(MCP_EFLG, MCP_ShadowRegs[1] | 0x80);	//clear RXB0 overflow error
+				MCP2515Write(MCP_EFLG, MCP_ShadowRegs[1] & ~MCP_EFLG_RX0OVR);	//clear RXB0 overflow error
 			if(MCP_ShadowRegs[1] & MCP_EFLG_TXBO);
 			if(MCP_ShadowRegs[1] & MCP_EFLG_TXEP);
 			if(MCP_ShadowRegs[1] & MCP_EFLG_RXEP);
@@ -113,17 +136,17 @@ void SensorCovMeasure()
 
 		if(MCP_ShadowRegs[0] & MCP_CANINTF_TX2IF)
 		{
-			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_TX2IF)); // clear interrupt flag
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] & ~MCP_CANINTF_TX2IF)); // clear interrupt flag
 		}
 
 		if(MCP_ShadowRegs[0] & MCP_CANINTF_TX1IF)
 		{
-			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_TX1IF)); // clear interrupt flag
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] & ~MCP_CANINTF_TX1IF)); // clear interrupt flag
 		}
 
 		if(MCP_ShadowRegs[0] & MCP_CANINTF_TX0IF)
 		{
-			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_TX0IF)); // clear interrupt flag
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] & ~MCP_CANINTF_TX0IF)); // clear interrupt flag
 			//This should signal successful transmission
 			if((MCP2515Read(MCP_TXB0CTRL) & 0x78) == 0)					//check for no errors
 				MCP2515_Send_State = 1;
@@ -133,16 +156,18 @@ void SensorCovMeasure()
 
 		if(MCP_ShadowRegs[0] & MCP_CANINTF_RX1IF)
 		{
-			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_RX1IF)); // clear interrupt flag
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] & ~MCP_CANINTF_RX1IF)); // clear interrupt flag
 			MCP2515_Receive_State = 2;
 		}
 
 		if(MCP_ShadowRegs[0] & MCP_CANINTF_RX0IF)
 		{
-			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] | ~MCP_CANINTF_RX0IF)); // clear interrupt flag
+			MCP2515Write(MCP_CANINTF, (MCP_ShadowRegs[0] & ~MCP_CANINTF_RX0IF)); // clear interrupt flag
 			MCP2515_Receive_State = 1;
 		}
 
+	//	MCP2515ReadBlock(MCP_CANINTF, MCP_ShadowRegs, 2);		//read the status registers
+	//	tmp = 1;
 	}//end MCP2515 interrupt handler
 
 
@@ -153,7 +178,7 @@ void SensorCovMeasure()
 			tmp = Buffer_MCPFillMessage(&Buf_2toA, 0);	//attempt to add message from buffer
 			if(tmp != -1)								//if add was successful,
 			{
-				ops.Counters.fields.Buf2toA = tmp;		//keep count up to date
+				ops.can2toA.fields.Buffer_level = tmp;	//keep 2->A buffer count up to date
 				MCP2515Write(MCP_TXB0CTRL,0x0B);		//flag message for transmission
 				StopWatchRestart(mirror_2toA_watch);	//start timeout counter
 				MCP2515_Send_State = 2;					//go to timeout wait
@@ -168,6 +193,7 @@ void SensorCovMeasure()
 			if(isStopWatchComplete(mirror_2toA_watch) == 1)
 			{
 				//Timeout error for send message on canA
+				ops.can2toA.fields.Write_Timeouts += 1;	//write timeout on 2->A
 				MCP2515_Send_State = 3;					//go to abort message
 			}
 		break;
@@ -189,27 +215,31 @@ void SensorCovMeasure()
 	switch(MCP2515_Receive_State)
 	{
 	case 1:	//Get message from RXB0
+		StopWatchRestart(canA_watch);					//received message on A, therefore A is not dead
 		tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
 		if (tmp != -1)
 		{
-			ops.Counters.fields.BufAto2 = tmp;
+			ops.canAto2.fields.Buffer_level = tmp;		//update buffer level
 		}
 		else
 		{
-			tmp=1;						//todo handle full buffer here
+			ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
+			// Todo possible do something else about overflows
 		}
 
 		MCP2515_Receive_State = 0;		//go back to waiting
 		break;
 	case 2: //Get message from RXB1
+		StopWatchRestart(canA_watch);					//received message on A, therefore A is not dead
 		tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
 		if (tmp != -1)
 		{
-			ops.Counters.fields.BufAto2 = tmp;
+			ops.canAto2.fields.Buffer_level = tmp;		//update buffer level
 		}
 		else
 		{
-			tmp=1;						//todo handle full buffer here
+			ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
+			// Todo possible do something else about overflows
 		}
 
 		MCP2515_Receive_State = 0;		//go back to waiting
@@ -232,9 +262,10 @@ void SensorCovMeasure()
 	ECanaShadow.CANTRS.all = ECanaRegs.CANTRS.all;			//get CAN transmit status register
 	if ((ECanaShadow.CANTRS.all & (1 << 0x04)) == 0)		//check if mailbox 4 is not sending
 	{
-		if(CANQueueEMPTY == 0)								//check if there are messages to send
+		tmp = Buffer_Read(&Buf_Ato2, tmp_buffer);			//get can message
+		if(tmp != -1)										//check if there are messages to send
 		{
-			StopWatchRestart(can2_watch);					//restart stopwatch for timeout
+			StopWatchRestart(mirror_Ato2_watch);					//restart stopwatch for timeout
 
 			//set up the actual CAN transmission
 			EALLOW;
@@ -248,16 +279,16 @@ void SensorCovMeasure()
 
 				//message ID is: bit 31 = EXID, bit 30,29 = acceptance bits, 0 for transmit, 28:0 ID, ID is left aligned
 				ECanaMboxes.MBOX4.MSGID.all = 0;
-				if (CANQueue_raw[CANQueueOUT][1] & 0x0008)
+				if (tmp_buffer[1] & 0x0008)
 				{//extended ID
-					ECanaMboxes.MBOX4.MSGID.all = (0x80000000L | (CANQueue_raw[CANQueueOUT][1] & 0x00000003L) << 27 | (CANQueue_raw[CANQueueOUT][2] & 0x000000FFL) << 19 | (CANQueue_raw[CANQueueOUT][3] & 0x000000FFL) << 10 | (CANQueue_raw[CANQueueOUT][0] & 0x000000FFL) << 3 | (CANQueue_raw[CANQueueOUT][1] & 0x000000E0L) >> 5);
+					ECanaMboxes.MBOX4.MSGID.all = (0x80000000L | (tmp_buffer[1] & 0x00000003L) << 27 | (tmp_buffer[2] & 0x000000FFL) << 19 | (tmp_buffer[3] & 0x000000FFL) << 10 | (tmp_buffer[0] & 0x000000FFL) << 3 | (tmp_buffer[1] & 0x000000E0L) >> 5);
 				}
 				else
 				{//standard ID
-					ECanaMboxes.MBOX4.MSGID.bit.STDMSGID = (0x00000000L | (CANQueue_raw[CANQueueOUT][0] & 0x000000FFL) << 3 | (CANQueue_raw[CANQueueOUT][1] & 0x000000E0L) >> 5);
+					ECanaMboxes.MBOX4.MSGID.bit.STDMSGID = (0x00000000L | (tmp_buffer[0] & 0x000000FFL) << 3 | (tmp_buffer[1] & 0x000000E0L) >> 5);
 				}
 
-				ECanaMboxes.MBOX4.MSGCTRL.bit.DLC = CANQueue_raw[CANQueueOUT][4] & 0x000F;			//DLC
+				ECanaMboxes.MBOX4.MSGCTRL.bit.DLC = tmp_buffer[4] & 0x000F;			//DLC
 				ECanaShadow.CANMD.bit.MD4 = 0; 			//transmit
 				ECanaShadow.CANME.bit.ME4 = 1;			//enable
 
@@ -271,8 +302,8 @@ void SensorCovMeasure()
 				ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;	//set regs
 
 				//set data
-				ECanaMboxes.MBOX4.MDL.all = (CANQueue_raw[CANQueueOUT][5] & 0x000000FFL) | (CANQueue_raw[CANQueueOUT][6] & 0x000000FFL) << 8 | (CANQueue_raw[CANQueueOUT][7] & 0x000000FFL) << 16 | (CANQueue_raw[CANQueueOUT][8] & 0x000000FFL) << 24;					//fill data
-				ECanaMboxes.MBOX4.MDH.all = (CANQueue_raw[CANQueueOUT][9] & 0x000000FFL) | (CANQueue_raw[CANQueueOUT][10] & 0x000000FFL) << 8 | (CANQueue_raw[CANQueueOUT][11] & 0x000000FFL) << 16 | (CANQueue_raw[CANQueueOUT][12] & 0x000000FFL) << 24;
+				ECanaMboxes.MBOX4.MDL.all = (tmp_buffer[5] & 0x000000FFL) | (tmp_buffer[6] & 0x000000FFL) << 8 | (tmp_buffer[7] & 0x000000FFL) << 16 | (tmp_buffer[8] & 0x000000FFL) << 24;					//fill data
+				ECanaMboxes.MBOX4.MDH.all = (tmp_buffer[9] & 0x000000FFL) | (tmp_buffer[10] & 0x000000FFL) << 8 | (tmp_buffer[11] & 0x000000FFL) << 16 | (tmp_buffer[12] & 0x000000FFL) << 24;
 
 				ECanaShadow.CANMC.bit.MBNR = 0;					//clear request for mailbox 4
 				ECanaShadow.CANMC.bit.CDR = 0;					//clear change data field request
@@ -283,21 +314,15 @@ void SensorCovMeasure()
 			//request that the mailbox be sent
 			ECanaShadow.CANTRS.all = 1 << 0x04;				//mark mailbox 4 for transmit
 			ECanaRegs.CANTRS.all = ECanaShadow.CANTRS.all;	//set in real registers
-
-			if (++CANQueueOUT == CANQUEUEDEPTH) CANQueueOUT = 0;					//increment with wrap
-			CANQueueFULL = 0;														//just pulled a message, can't be full
-			if (CANQueueIN == CANQueueOUT) CANQueueEMPTY = 1;						//test for empty
-			CANQueueCount -=1;														//decrement counter
-			ops.Counters.fields.BufAto2 -=1;
 		}
 	}
 	else	//mailbox 4 is sending
 	{
-		if(isStopWatchComplete(can2_watch) == 1)
+		if(isStopWatchComplete(mirror_Ato2_watch) == 1)
 		{
 			//error on CAN send timeout
 			//increment timeout counter and clear mailbox 4
-			ops.Flags.fields.Timeout += 1;
+			ops.canAto2.fields.Write_Timeouts += 1;
 
 			ECanaShadow.CANTRR.all = ECanaRegs.CANTRR.all;
 			ECanaShadow.CANTRR.bit.TRR4 = 1;
@@ -311,7 +336,7 @@ void SensorCovMeasure()
     if (isStopWatchComplete(canA_watch) == 1)
 	{
 		//indicate CAN bus A down
-    	ops.Flags.fields.can_status = 0;
+    	ops.canAto2.fields.can_error = 1;
     	SETLED0();
 	}
 }
@@ -335,14 +360,10 @@ void MCP2515_Total_Reset(long delay)
 	PgmInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515
 
 	Buffer_Clear(&Buf_Ato2);
-	ops.Counters.fields.BufAto2 = 0;
-	ops.Flags.fields.Overflow = 0;
-	ops.Flags.fields.Timeout = 0;
+	ops.canAto2.all = 0;
 
 	Buffer_Clear(&Buf_2toA);
-	ops.Counters.fields.Buf2toA = 0;
-	ops.Flags2.fields.Overflow = 0;
-	ops.Flags2.fields.Timeout = 0;
+	ops.can2toA.all = 0;
 
 	MCP2515_Send_State = 0;								//MCP2515 state to default
 	MCP2515_Receive_State = 0;
