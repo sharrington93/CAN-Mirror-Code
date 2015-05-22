@@ -22,20 +22,5 @@ extern int Buffer_MCPFillMessage(buffer_struct* buf, int txbn);
 extern int Buffer_Read(buffer_struct* buf, unsigned int* data);
 extern int Buffer_Write(buffer_struct* buf, unsigned int* data);
 
-//The Default CAN frequency, index to list of standard values
-//0 = 1Mbit
-//1 = 500Kbit
-//2 = 250Kbit
-//3 = 125Kbit
-//4 = 62.5Kbit
-#define CANFREQ 1
 
-const unsigned int MaskConfig[32] = {0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000};
 #endif

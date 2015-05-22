@@ -5,10 +5,16 @@
  *      Author: Nathan
  */
 #include "all.h"
-
+#include "MCP2515.h"		//MCP2515 functions
+#include "MCP2515_DEFS.h"
+#include "MCP2515_spi.h"
 
 //variables for the 2->A CAN message queue
 extern buffer_struct Buf_2toA;
+extern buffer_struct Buf_Ato2;
+extern stopwatch_struct* canA_watch;
+extern stopwatch_struct* can2_watch;
+extern int MCP_TXn_Ready;
 
 int Buffer_FillMessage(buffer_struct* buf, unsigned int sid, unsigned long eid, unsigned int dl, Uint32 dataH, Uint32 dataL);
 
@@ -33,7 +39,6 @@ void CANSetup()
 	ECanaShadow.CANMD.all = ECanaRegs.CANMD.all;
 	ECanaShadow.CANME.all = ECanaRegs.CANME.all;
 
-	//todo USER: Node specifc CAN setup
 	EALLOW;
 
 	// create mailbox for all Receive and transmit IDs
@@ -448,13 +453,11 @@ void ClearMailBoxes()
 
 char FillCAN(unsigned int Mbox)
 {
-	//todo USER: setup for all transmit MBOXs
 	struct ECAN_REGS ECanaShadow;
 	ECanaShadow.CANMC.all = ECanaRegs.CANMC.all;
 	switch (Mbox)								//choose mailbox
 	{
 	case HEARTBEAT_BOX:
-		//todo Nathan define heartbeat
 		EALLOW;
 		ECanaShadow.CANMC.bit.MBNR = Mbox;
 		ECanaShadow.CANMC.bit.CDR = 1;
@@ -511,7 +514,6 @@ void SendCAN(unsigned int Mbox)
 	mask = 1 << Mbox;
 	ECanaRegs.CANTRS.all = mask;
 
-	//todo Nathan: calibrate sendcan stopwatch
 	StopWatchRestart(can_watch);
 
 	do{ECanaShadow.CANTA.all = ECanaRegs.CANTA.all;}
@@ -531,7 +533,6 @@ void SendCAN(unsigned int Mbox)
 
 void FillCANData()
 {
-	//todo USER: use FillCAN to put data into correct mailboxes
 	FillCAN(ADC_BOX);
 	FillCAN(GP_BUTTON_BOX);
 }
@@ -546,15 +547,12 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
   	unsigned int mailbox_nr;
   	ECanaShadow.CANGIF1.bit.MIV1 =  ECanaRegs.CANGIF1.bit.MIV1;
   	mailbox_nr = ECanaShadow.CANGIF1.bit.MIV1;
-  	//todo USER: Setup ops command
+
+  	StopWatchRestart(can2_watch);					//received message on 2, therefore 2 is not dead
 
   	switch(mailbox_nr)
   	{
   	case COMMAND_BOX:
-  		//todo Nathan: Define Command frame
-  		//proposed:
-  		//HIGH 4 BYTES = Uint32 ID
-  		//LOW 4 BYTES = Uint32 change to
 		ECanaRegs.CANRMP.bit.RMP0 = 1;
 	break;
 
@@ -725,6 +723,95 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
   	PieCtrlRegs.PIEACK.all = PIEACK_GROUP9;
 }
 
+
+//interrupt for MCP2515
+// INT1.4
+__interrupt void  XINT1_ISR(void)
+{
+	int tmp;
+	unsigned int MCP_ShadowRegs[2];									//shadow registers for CANINTF, EFLG, CANSTAT, CANCTRL
+	// Insert ISR Code here
+
+	MCP2515ReadBlock(MCP_CANINTF, MCP_ShadowRegs, 2);		//read the status registers
+	//MCP_ShadowRegs[0] = CANINTF
+	//MCP_ShadowRegs[1] = EFLG
+
+	if(MCP_ShadowRegs[0] & MCP_CANINTF_MERRF)
+	{
+		//this catches all message transmit/receive errors
+	}
+
+	if(MCP_ShadowRegs[0] & MCP_CANINTF_WAKIF)
+	{
+	}
+
+	if((MCP_ShadowRegs[0] & MCP_CANINTF_ERRIF) | (MCP_ShadowRegs[1] != 0))
+	{
+		//check EFLG to see what generated the error
+		if(MCP_ShadowRegs[1] & MCP_EFLG_RX1OVR);
+		if(MCP_ShadowRegs[1] & MCP_EFLG_RX0OVR);
+		if(MCP_ShadowRegs[1] & MCP_EFLG_TXBO);
+		if(MCP_ShadowRegs[1] & MCP_EFLG_TXEP);
+		if(MCP_ShadowRegs[1] & MCP_EFLG_RXEP);
+		if(MCP_ShadowRegs[1] & MCP_EFLG_TXWAR);
+		if(MCP_ShadowRegs[1] & MCP_EFLG_RXWAR);
+		if(MCP_ShadowRegs[1] & MCP_EFLG_EWARN);
+	}
+
+	if(MCP_ShadowRegs[0] & MCP_CANINTF_TX2IF)
+	{
+		MCP_TXn_Ready |= 0x04;	//Flag TX2 as ready for a message
+	}
+
+	if(MCP_ShadowRegs[0] & MCP_CANINTF_TX1IF)
+	{
+		MCP_TXn_Ready |= 0x02;	//Flag TX1 as ready for a message
+	}
+
+	if(MCP_ShadowRegs[0] & MCP_CANINTF_TX0IF)
+	{
+		MCP_TXn_Ready |= 0x01;	//Flag TX0 as ready for a message
+	}
+
+	if(MCP_ShadowRegs[0] & MCP_CANINTF_RX0IF)
+	{
+		StopWatchRestart(canA_watch);					//received message on A, therefore A is not dead
+		tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
+		if (tmp != -1)
+		{
+			ops.canAto2.fields.Buffer_level = tmp;		//update buffer level
+		}
+		else
+		{
+			ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
+			// Todo possible do something else about overflows
+		}
+	}
+
+	if(MCP_ShadowRegs[0] & MCP_CANINTF_RX1IF)
+	{
+		StopWatchRestart(canA_watch);					//received message on A, therefore A is not dead
+		tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
+		if (tmp != -1)
+		{
+			ops.canAto2.fields.Buffer_level = tmp;		//update buffer level
+		}
+		else
+		{
+			ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
+			// Todo possible do something else about overflows
+		}
+	}
+
+	//clear all the MCP2515 interrupt flags and error flags
+	MCP_ShadowRegs[0] = 0;
+	MCP_ShadowRegs[1] = 0;
+	SR2_SPI(MCP_WRITE, MCP_CANINTF, 2, MCP_ShadowRegs);
+
+	// To receive more interrupts from this PIE group, acknowledge this interrupt
+	PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
+}
+
 int Buffer_FillMessage(buffer_struct* buf, unsigned int sid, unsigned long eid, unsigned int dl, Uint32 dataH, Uint32 dataL)
 {// fills a buf with a message from the arguments. Returns number of messages in buffer after write, or -1 on overflow
 
@@ -756,15 +843,4 @@ int Buffer_FillMessage(buffer_struct* buf, unsigned int sid, unsigned long eid, 
 	{
 		return -1;
 	}
-}
-
-//interrupt for MCP2515
-// INT1.4
-__interrupt void  XINT1_ISR(void)
-{
-	int tmp;
-	// Insert ISR Code here
-	tmp = 1;
-	// To receive more interrupts from this PIE group, acknowledge this interrupt
-	PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
 }

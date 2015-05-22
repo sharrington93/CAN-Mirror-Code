@@ -232,6 +232,9 @@ void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data)
 	//set CANINTE for interrupt enable (want interrupts on everything)
 	MCP2515Write(MCP_CANINTE,0xFF);
 	
+	//enable Rollover on RXB0
+	MCP2515Write(MCP_RXB0CTRL, 0x04);
+
 	//set mask/filter registers
 	//masks 0,1 are contiguous, can set them with a single write
 	for(i=0;i<8;i++) buf[i]=data[i];
