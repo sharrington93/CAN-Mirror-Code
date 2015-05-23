@@ -56,7 +56,7 @@ void SensorCov()
 		LatchStruct();
 		SensorCovMeasure();
 	//	UpdateStruct();
-		FillCANData();
+	//	FillCANData();
 	}
 	SensorCovDeInit();
 }
@@ -93,10 +93,10 @@ void SensorCovInit()
 
 	MCP2515_Total_Reset(0);
 
-	mirror_Ato2_watch = StartStopWatch(100);		//start stopwatch for Ato2 timeout
-	mirror_2toA_watch0 = StartStopWatch(100);    	//start stopwatch for 2toA timeout
-	mirror_2toA_watch1 = StartStopWatch(100);    	//start stopwatch for 2toA timeout
-	mirror_2toA_watch2 = StartStopWatch(100);    	//start stopwatch for 2toA timeout
+	mirror_Ato2_watch = StartStopWatch(500);		//start stopwatch for Ato2 timeout
+	mirror_2toA_watch0 = StartStopWatch(500);    	//start stopwatch for 2toA timeout
+	mirror_2toA_watch1 = StartStopWatch(500);    	//start stopwatch for 2toA timeout
+	mirror_2toA_watch2 = StartStopWatch(500);    	//start stopwatch for 2toA timeout
 	canA_watch = StartStopWatch(50000);				//start stopwatch for canA bus status
 	can2_watch = StartStopWatch(50000);				//start stopwatch for can2 bus status
 }
@@ -126,14 +126,14 @@ void SensorCovMeasure()
 			{
 				ops.can2toA.fields.Buffer_level = Buffer_MCPFillMessage(&Buf_2toA, 0);	//add message from buffer
 				MCP_TXn_Ready &= 0x06;													//clear TXB0 ready flag
-				MCP2515Write(MCP_TXB0CTRL,0x0B);										//flag message for transmission
+				MCP2515Write(MCP_TXB0CTRL,0x09);										//flag message for transmission
 				StopWatchRestart(mirror_2toA_watch0);									//start timeout counter
 			}
 			else if (MCP_TXn_Ready & 0x02)												//try to send using TXB1
 			{
 				ops.can2toA.fields.Buffer_level = Buffer_MCPFillMessage(&Buf_2toA, 1);	//add message from buffer
 				MCP_TXn_Ready &= 0x05;													//clear TXB0 ready flag
-				MCP2515Write(MCP_TXB1CTRL,0x0B);										//flag message for transmission
+				MCP2515Write(MCP_TXB1CTRL,0x0A);										//flag message for transmission
 				StopWatchRestart(mirror_2toA_watch1);									//start timeout counter
 			}
 			else if (MCP_TXn_Ready & 0x04)												//try to send using TXB2
@@ -148,22 +148,33 @@ void SensorCovMeasure()
 		}
 
 	//watch for send timeouts
-	if (MCP_TXn_Ready & 0x01 == 0)														//check if TXB0 has a pending message
+	if ((MCP_TXn_Ready & 0x01) == 0)														//check if TXB0 has a pending message
 	{
 		if(isStopWatchComplete(mirror_2toA_watch0))
+		{
 			ops.can2toA.fields.Write_Timeouts += 1;
-		//Todo do message abort here
+			MCP2515Write(MCP_TXB0CTRL, 0x01);													//clear send request
+			MCP_TXn_Ready |= 0x01;															//flag transmitter as ready
+		}
 	}
 
-	if (MCP_TXn_Ready & 0x02 == 0)														//check if TXB1 has a pending message
+	if ((MCP_TXn_Ready & 0x02) == 0)														//check if TXB1 has a pending message
 	{
 		if(isStopWatchComplete(mirror_2toA_watch1))
+		{
 			ops.can2toA.fields.Write_Timeouts += 1;
+			MCP2515Write(MCP_TXB1CTRL, 0x02);													//clear send request
+			MCP_TXn_Ready |= 0x02;															//flag transmitter as ready
+		}
 	}
-	if (MCP_TXn_Ready & 0x04 == 0)														//check if TXB1 has a pending message
+	if ((MCP_TXn_Ready & 0x04) == 0)														//check if TXB1 has a pending message
 	{
 		if(isStopWatchComplete(mirror_2toA_watch2))
+		{
 			ops.can2toA.fields.Write_Timeouts += 1;
+			MCP2515Write(MCP_TXB2CTRL, 0x03);													//clear send request
+			MCP_TXn_Ready |= 0x04;															//flag transmitter as ready
+		}
 	}
 
 
