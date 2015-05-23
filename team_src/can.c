@@ -729,12 +729,14 @@ __interrupt void ECAN1INTA_ISR(void)  // eCAN-A
 __interrupt void  XINT1_ISR(void)
 {
 	int tmp;
-	unsigned int MCP_ShadowRegs[2];									//shadow registers for CANINTF, EFLG, CANSTAT, CANCTRL
+	unsigned int MCP_ShadowRegs[2];							//shadow registers for CANINTF, EFLG, CANSTAT, CANCTRL
 	// Insert ISR Code here
 
 	MCP2515ReadBlock(MCP_CANINTF, MCP_ShadowRegs, 2);		//read the status registers
 	//MCP_ShadowRegs[0] = CANINTF
 	//MCP_ShadowRegs[1] = EFLG
+
+	ops.canAto2.fields.flags = MCP_ShadowRegs[1] >> 1;			//use flags in ops to watch the error flags
 
 	if(MCP_ShadowRegs[0] & MCP_CANINTF_MERRF)
 	{

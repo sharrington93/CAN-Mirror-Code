@@ -117,7 +117,7 @@ SECTIONS
    /* Allocate program areas: */
    .cinit              : > FLASHE      PAGE = 0
    .pinit              : > FLASHC,     PAGE = 0
-   .text               : > FLASHC      PAGE = 0
+   .text               : > FLASHF      PAGE = 0
 
 
    codestart           : > BEGIN       PAGE = 0

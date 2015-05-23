@@ -27,7 +27,7 @@ const unsigned int MaskConfig[32] = {0x0000,0x0000,0x0000,0x0000,
 									 0x0000,0x0000,0x0000,0x0000,
 									 0x0000,0x0000,0x0000,0x0000};
 
-void MCP2515_Total_Reset(long delay);								//does a total reset of the MCP2515 system. stays off bus for delay before coming back on line.
+void MCP2515_Total_Reset(int delay);								//does a total reset of the MCP2515 system. stays off bus for delay before coming back on line.
 
 
 stopwatch_struct* mirror_Ato2_watch;
@@ -178,6 +178,10 @@ void SensorCovMeasure()
 	}
 
 
+	//error checking
+	if (ops.canAto2.fields.flags & 0x10)				//check for off-bus condition
+		MCP2515_Total_Reset(500);						//reset the MCP2515 after 500 ms
+
 //*****************************************************************end MCP2515 service********************************************************************************************
 
 //***********************************************This code takes care of sending messages out on CAN bus 2************************************************************************
@@ -298,8 +302,13 @@ void SensorCovDeInit()
 	SETLED1();
 }
 
-void MCP2515_Total_Reset(long delay)
+void MCP2515_Total_Reset(int delay)
 {
+	int i,j;
+	if (delay > 0)
+		for(j=0;j<delay;j++)
+			for (i=0;i<10;i++)
+				DELAY_US(100);
 
 	MCP2515_spi_init();								//initialize SPI port and GPIO associated with the MCP2515
 	PgmInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515

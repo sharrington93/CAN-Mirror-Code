@@ -19,39 +19,45 @@ void SR_SPI(unsigned int length, unsigned int *buf)
 {
 	unsigned int i;
 
-	//todo figure out the C2000 equiv of this //while (!(UCSRnA & (1<<UDRE0)));		//wait for transmitter ready	
-	SPI_CS_LOW();						//set CS low
-	for(i=0;i<length;i++)					//loop over length
+	DINT;										//disable interrupts during sending
+
+	SPI_CS_LOW();								//set CS low
+	for(i=0;i<length;i++)						//loop over length
 	{
 		SpibRegs.SPITXBUF=(buf[i]<<8);			//send byte
 		while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-		buf[i] = SpibRegs.SPIRXBUF;			//save response
+		buf[i] = SpibRegs.SPIRXBUF;				//save response
 	}
-	SPI_CS_HIGH();						//set CS high
+	SPI_CS_HIGH();								//set CS high
+
+	EINT;										//re-enable interrupts
 }
 
 void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsigned int *buf)
 {
 	unsigned int i;
 
-	//todo figure out the C2000 equiv of this //while (!(UCSRnA & (1<<UDRE0)));		//wait for transmitter ready	
-	SPI_CS_LOW();						//set CS low
+	DINT;										//disable interrupts during sending
 
-	SpibRegs.SPITXBUF=(byte1<<8);			//send byte
-	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-	i = SpibRegs.SPIRXBUF;				//dummy read
+	SPI_CS_LOW();								//set CS low
 
-	SpibRegs.SPITXBUF=(byte2<<8);			//send byte
-	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-	i = SpibRegs.SPIRXBUF;				//dummy read
+	SpibRegs.SPITXBUF=(byte1<<8);				//send byte
+	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);		//wait for response
+	i = SpibRegs.SPIRXBUF;						//dummy read
 
-	for(i=0;i<length;i++)					//loop over length
+	SpibRegs.SPITXBUF=(byte2<<8);				//send byte
+	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);		//wait for response
+	i = SpibRegs.SPIRXBUF;						//dummy read
+
+	for(i=0;i<length;i++)						//loop over length
 	{
 		SpibRegs.SPITXBUF=(buf[i]<<8);			//send byte
 		while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-		buf[i] = SpibRegs.SPIRXBUF;			//save response
+		buf[i] = SpibRegs.SPIRXBUF;				//save response
 	}
-	SPI_CS_HIGH();						//set CS high
+	SPI_CS_HIGH();								//set CS high
+
+	EINT;										//enable interrupts
 }
 
 void MCP2515_reset(unsigned int rst)
