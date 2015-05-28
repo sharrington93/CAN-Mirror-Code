@@ -351,7 +351,7 @@ void CANSetup()
 	ECanaShadow.CANMD.bit.MD28 = 1;			//receive
 	ECanaShadow.CANME.bit.ME28 = 1;			//enable
 	ECanaShadow.CANMIM.bit.MIM28  = 1; 		//int enable
-	ECanaShadow.CANMIL.bit.MIL25  = 1;  		// Int.-Level MB#0  -> I1EN
+	ECanaShadow.CANMIL.bit.MIL28  = 1;  		// Int.-Level MB#0  -> I1EN
 
 	//BIM Stat 5 receive
 	ECanaMboxes.MBOX29.MSGID.bit.IDE = 0; 	//standard id
