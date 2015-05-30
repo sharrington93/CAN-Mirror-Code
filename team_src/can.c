@@ -814,6 +814,24 @@ __interrupt void  XINT1_ISR(void)
 	PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
 }
 
+void BUS_OFF()
+{
+	EALLOW;
+	ECanaShadow.CANMC.all = ECanaRegs.CANMC.all;
+
+
+	ECanaShadow.CANMC.bit.CCR = 0;
+	ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;
+
+	ECanaShadow.CANES.all = ECanaRegs.CANES.all;
+	while (ECanaShadow.CANES.bit.CCE != 0)
+	{
+		ECanaShadow.CANES.all = ECanaRegs.CANES.all;
+	}
+
+	EDIS;
+}
+
 int Buffer_FillMessage(buffer_struct* buf, unsigned int sid, unsigned long eid, unsigned int dl, Uint32 dataH, Uint32 dataL)
 {// fills a buf with a message from the arguments. Returns number of messages in buffer after write, or -1 on overflow
 
