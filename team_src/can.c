@@ -25,6 +25,13 @@ void CANSetup()
 	ECanaShadow.CANGIM.bit.I1EN = 1;  // enable I1EN
 	ECanaShadow.CANMD.all = ECanaRegs.CANMD.all;
 	ECanaShadow.CANME.all = ECanaRegs.CANME.all;
+	
+	// Bit rate override from InitECana
+	// 1 Mbps using Table 33
+	ECanaShadow.CANBTC.bit.BRPREG = 1;		
+    ECanaShadow.CANBTC.bit.TSEG1REG = 10;
+    ECanaShadow.CANBTC.bit.TSEG2REG = 2;
+    ECanaShadow.CANBTC.bit.SJWREG = 1;
 
 	//todo USER: Node specifc CAN setup
 	EALLOW;
