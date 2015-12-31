@@ -127,6 +127,89 @@
 #define MCP_RXB1D6	0x7C
 #define MCP_RXB1D7	0x7D
 
+//define Bit fields for status regs
+
+//Message Error Interrupt Flag bit
+#define MCP_CANINTF_MERRF	0x80
+//Wakeup Interrupt Flag bit
+#define MCP_CANINTF_WAKIF	0x40
+//Error Interrupt Flag bit (multiple sources in EFLG register)
+#define MCP_CANINTF_ERRIF	0x20
+//Transmit Buffer 2 Empty Interrupt Flag bit
+#define MCP_CANINTF_TX2IF	0x10
+//Transmit Buffer 1 Empty Interrupt Flag bit
+#define MCP_CANINTF_TX1IF	0x08
+//Transmit Buffer 0 Empty Interrupt Flag bit
+#define MCP_CANINTF_TX0IF	0x04
+//Receive Buffer 1 Full Interrupt Flag bit
+#define MCP_CANINTF_RX1IF	0x02
+//Receive Buffer 0 Full Interrupt Flag bit
+#define MCP_CANINTF_RX0IF	0x01
+
+//Receive Buffer 1 Overflow Flag bit
+#define MCP_EFLG_RX1OVR		0x80
+//Receive Buffer 0 Overflow Flag bit
+#define MCP_EFLG_RX0OVR		0x40
+//Bus-Off Error Flag bit (set when error counter reaches 255, reset after bus recovery sequence)
+#define MCP_EFLG_TXBO		0x20
+//Transmit Error-Passive Flag bit (TEC>=128)
+#define MCP_EFLG_TXEP		0x10
+//Receive Error-Passive Flag bit  (REC>=128)
+#define MCP_EFLG_RXEP		0x08
+//Transmit Error Warning Flag bit (TEC>=96)
+#define MCP_EFLG_TXWAR		0x04
+//Receive Error Warning Flag bit  (REC>=96)
+#define MCP_EFLG_RXWAR		0x02
+//Error Warning Flag bit		  (TEC>=96 | REC>=96)
+#define MCP_EFLG_EWARN		0x01
+
+//OPMOD2..0 Operation mode
+#define MCP_CANSTAT_OPMOD	0xE0
+#define MCP_CANSTAT_OPMOD2	0x80
+#define MCP_CANSTAT_OPMOD1	0x40
+#define MCP_CANSTAT_OPMOD0	0x20
+//mode values
+#define MCP_CANSTAT_NORMAL	0x00
+#define MCP_CANSTAT_SLEEP	0x20
+#define MCP_CANSTAT_LOOP	0x40
+#define MCP_CANSTAT_LISTEN	0x60
+#define MCP_CANSTAT_CONFIG	0x80
+//ICOD2..0 interrupt Code
+#define MCP_CANSTAT_ICOD	0x0E
+#define MCP_CANSTAT_ICOD2	0x08
+#define MCP_CANSTAT_ICOD1	0x04
+#define MCP_CANSTAT_ICOD0	0x02
+//interrupt values
+#define MCP_CANSTAT_NOINT	0x00
+#define MCP_CANSTAT_ERR		0x02
+#define MCP_CANSTAT_WAKE	0x04
+#define MCP_CANSTAT_TXB0	0x06
+#define MCP_CANSTAT_TXB1	0x08
+#define MCP_CANSTAT_TXB2	0x0A
+#define MCP_CANSTAT_RXB0	0x0C
+#define MCP_CANSTAT_RXB1	0x0E
+
+//REQOP2..0 Request Operation Mode
+#define MCP_CANCTRL_REQOP	0xE0
+#define MCP_CANCTRL_REQOP2	0x80
+#define MCP_CANCTRL_REQOP1	0x40
+#define MCP_CANCTRL_REQOP0	0x20
+//Operation mode values
+#define MCP_CANCTRL_NORMAL	0x00
+#define MCP_CANCTRL_SLEEP	0x20
+#define MCP_CANCTRL_LOOP	0x40
+#define MCP_CANCTRL_LISTEN	0x60
+#define MCP_CANCTRL_CONFIG	0x80
+//abort all pending transmissions bit
+#define MCP_CANCTRL_ABAT	0x10
+//one-shot mode enable
+#define MCP_CANCTRL_OSM		0x08
+//CLKOUT enable
+#define MCP_CANCTRL_CLKEN	0x04
+//CLKOUT pin Pre-scale
+#define MCP_CANCTRL_CLKPRE1	0x02
+#define MCP_CANCTRL_CLKPRE0	0x01
+
 //define SPI commands
 
 #define MCP_RESET	0xC0

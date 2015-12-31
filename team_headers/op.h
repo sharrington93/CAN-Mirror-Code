@@ -24,23 +24,25 @@ typedef struct CHANGE_OPS
 	char Flags : 1;
 }change_struct;
 
-//todo User: stopwatch errors
-typedef struct FLAGS
+typedef struct MIRROR_STATS
 {
-	unsigned char Overflow	 : 8;
-	unsigned char Timeout	 : 6;
-	char can_error	 : 1;
-	char CANA_status : 1;
-}flags_struct;
+	unsigned char Buffer_level		: 8;
+	unsigned char Buffer_Overflows	: 8;
+	unsigned char Write_Timeouts	: 8;
+	unsigned char can_error			: 1;
+	unsigned char flags				: 7;
+
+}mirrorstat_struct;
 
 typedef struct OPERATIONS
 {
   unsigned long State;
   union Flag
   {
-	  long						all;
-	  flags_struct 				fields;
-  }								Flags;
+	  Uint32					all;
+	  mirrorstat_struct 		fields;
+  } can2toA, canAto2;
+
   union CHANGE
   {
   	long 			all;

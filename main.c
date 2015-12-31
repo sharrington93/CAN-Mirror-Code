@@ -112,13 +112,3 @@ void Restart()
 }
 
 
-// INT1.4
-__interrupt void  XINT1_ISR(void)
-{
-	// Insert ISR Code here
-	Boot(MesgID);
-	// To receive more interrupts from this PIE group, acknowledge this interrupt
-	PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
-}
-
-

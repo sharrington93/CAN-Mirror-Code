@@ -5,6 +5,7 @@
 // User must provide SR2_SPI which works the same as SR_SPI except the first two bytes are passed as arguments.
 // User must provide MCP2515_reset(uint16 rst); which sets the pin used as the MCP2515 reset high or low (rst = 1 is pin low, rst = 0  is pin high)
 
+#include "all.h"
 #include "MCP2515_DEFS.h"
 #include "MCP2515_spi.h"
 
@@ -21,9 +22,17 @@ void MCP2515Mode(unsigned int Mode);
 void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data);
 void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned int dl, unsigned int *data);
 unsigned int MCP2515Read(unsigned int Addr);
+void MCP2515ReadBlock(unsigned int Addr, unsigned int* buf, unsigned int length);
 void MCP2515Write(unsigned int Addr, unsigned int Data);
+//***********************buffer functions**********************************
+void Buffer_Clear(buffer_struct* buf);
+int Buffer_MCPGetMessage(buffer_struct* buf, int rxbn);				//reads a message from MCP2515 RXBn into buf
+int Buffer_MCPFillMessage(buffer_struct* buf, int txbn);				//Fills TBXn on MCP2515 from buf
+int Buffer_Read(buffer_struct* buf, unsigned int* data);			//a buffer read is always 13 bytes
+int Buffer_Write(buffer_struct* buf, unsigned int* data);
 
 //*****************************************************************************
+
 //sends a CAN message.
 //ID[15:5] are the std ID[10:0], bit[3] is the Ext ID bit. if this is set the frame is extended. bits [1:0] are extended ID bits 17:16]
 //ExtID[15:0] are the extended identifier bits [15:0] 
@@ -33,18 +42,18 @@ int MCP2515SendMessage(unsigned int ID, unsigned long ExtID, unsigned int DataL,
 {
 	int i;
 	int tmp;
-	MCP2515LoadTx(0, ID, ExtID, DataL, Data);						//load tx buffer
+	MCP2515LoadTx(0, ID, ExtID, DataL, Data);					//load tx buffer
 	MCP2515Write(MCP_TXB0CTRL,0x0B);							//flag message for sending
-	i=0;											//basic timeout. would be better to use a system tick
+	i=0;														//basic timeout. would be better to use a system tick
 	do
 	{
-		tmp = (0x78 & MCP2515Read(MCP_TXB0CTRL));					//check status of message
-		if (tmp == 0x00) return 0;							//success
+		tmp = (0x78 & MCP2515Read(MCP_TXB0CTRL));				//check status of message
+		if (tmp == 0x00) return 0;								//success
 		i++;
 	}
 	while(i < 5000);
 
-	MCP2515Write(MCP_TXB0CTRL,0x00);					//clear message send flag
+	MCP2515Write(MCP_TXB0CTRL,0x00);							//clear message send flag
 	return 1;
 }
 
@@ -61,6 +70,12 @@ unsigned int MCP2515Read(unsigned int Addr)
 }
 
 //*****************************************************************************
+//reads a contiguous block of registers starting at Addr
+void MCP2515ReadBlock(unsigned int Addr, unsigned int* buf, unsigned int length)
+{
+	SR2_SPI(MCP_READ, Addr, length, buf);
+}
+//******************************************************************************
 //writes a single register of the MCP2515
 void MCP2515Write(unsigned int Addr, unsigned int Data)
 {
@@ -214,9 +229,12 @@ void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data)
 	//set BFPCTRL (set pins to interrupt outputs => 0x0F)
 	MCP2515Write(MCP_BFPCTRL, 0x0F);
 
-	//set CANINTE for interrupt enable (want interrupts on RX0 & RX1, => 0x03)
-	MCP2515Write(MCP_CANINTE,0x03);
+	//set CANINTE for interrupt enable (want interrupts on everything)
+	MCP2515Write(MCP_CANINTE,0xFF);
 	
+	//enable Rollover on RXB0
+	MCP2515Write(MCP_RXB0CTRL, 0x04);
+
 	//set mask/filter registers
 	//masks 0,1 are contiguous, can set them with a single write
 	for(i=0;i<8;i++) buf[i]=data[i];
@@ -276,14 +294,14 @@ void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned
 	unsigned int i;
 	unsigned int buf[13];					//buffer for all the possible bytes in the transmit buffer
 
-	buf[0] = ((sid >> 3) & 0xFF);		//first reg is bits 10:3 of SID
-	buf[1] = ((sid & 0x07) << 5);		//put sid 2:0 in buf[1] 7:5
+	buf[0] = ((sid >> 3) & 0xFF);			//first reg is bits 10:3 of SID
+	buf[1] = ((sid & 0x07) << 5);			//put sid 2:0 in buf[1] 7:5
 	buf[1] |= ((sid & 0x8000) >> 12);		//sid:16 is EXIDE flag
 	buf[1] |= ((eid & 0x00030000 ) >> 16);	//sid1:0 are eid 17:16
 	buf[2] = ((eid >> 8) & 0xFF);
 	buf[3] = (eid & 0xFF);
-	buf[4] = dl & 0x0F;			//data length
-	for(i=0;i<dl;i++)				//data bytes
+	buf[4] = dl & 0x0F;						//data length
+	for(i=0;i<dl;i++)						//data bytes
 		buf[5+i] = data[i];
 
 	switch(n)
@@ -322,3 +340,97 @@ int MCP2515GetMessage(unsigned int *dmesg)
 	}
 }
 
+void Buffer_Clear(buffer_struct* buf)
+{
+	int i,j;
+	for (i=0;i<CANQUEUEDEPTH;i++)
+		for(j=0;j<13;j++)
+			buf->buf[i][j] = 0;
+
+	buf->count = 0;
+	buf->empty = 1;
+	buf->full = 0;
+	buf->in = 0;
+	buf->out = 0;
+}
+
+int Buffer_MCPGetMessage(buffer_struct* buf, int rxbn)
+{//reads a message from MCP2515 RXBn into buf. Returns number of items in buffer after read, or -1 on overflow
+
+	if(buf->full == 0)		//test if buffer is full
+	{
+		if(rxbn == 0)
+			SR2_SPI(MCP_READ, MCP_RXB0SIDH, 13, &buf->buf[buf->in][0]);	//read raw can message
+		else
+			SR2_SPI(MCP_READ, MCP_RXB1SIDH, 13, &buf->buf[buf->in][0]);	//read raw can message
+
+		if (++buf->in == CANQUEUEDEPTH) buf->in = 0;					//increment with wrap
+		if (buf->in == buf->out) buf->full = 1;							//test for full
+		buf->empty = 0;													//just wrote, can't be empty
+		buf->count +=1;													//increment counter
+		return buf->count;
+	}
+	else
+	{
+		return -1;
+	}
+}
+
+int Buffer_MCPFillMessage(buffer_struct* buf, int txbn)
+{// writes a message to the MCP2515 transmit buffer. DOES NOT FLAG THE MESSAGE FOR TRANSMISSION!
+ // returns the number of messages left in the buffer, or -1 on underflow
+	if(buf->empty == 0)
+	{
+		if(txbn == 0)
+			SR2_SPI(MCP_WRITE, MCP_TXB0SIDH, 13, &buf->buf[buf->out][0]); 	//write values to buffer
+		else if(txbn == 1)
+			SR2_SPI(MCP_WRITE, MCP_TXB1SIDH, 13, &buf->buf[buf->out][0]); 	//write values to buffer
+		else
+			SR2_SPI(MCP_WRITE, MCP_TXB2SIDH, 13, &buf->buf[buf->out][0]); 	//write values to buffer
+
+		if (++buf->out == CANQUEUEDEPTH) buf->out = 0;						//increment read pointer with wrap
+		if (buf->in == buf->out) buf->empty = 1;							//test for empty
+		buf->full = 0;														//just read, can't be full
+		buf->count -=1;														//decrement counter
+		return buf->count;
+	}
+	else
+	{
+		return -1;
+	}
+}
+
+int Buffer_Write(buffer_struct* buf, unsigned int* data)
+{//returns number of items in buffer after write, or -1 if an attempt was made to write to a full buffer
+	if (buf->full == 0)
+	{
+		memcpy(&buf->buf[buf->in][0], data, 13*sizeof(unsigned int));	//add data to buffer
+		if (++buf->in == CANQUEUEDEPTH) buf->in = 0;					//increment write pointer with wrap
+		if (buf->in == buf->out) buf->full = 1;							//test for full
+		buf->empty = 0;													//just wrote, can't be empty
+		buf->count +=1;													//increment counter
+		return buf->count;
+	}
+	else
+	{
+		return -1;
+	}
+}
+
+int Buffer_Read(buffer_struct* buf, unsigned int* data)
+{	//reads 13 byte message from buf into data
+	//returns number of items left in buffer after read or -1 if an attempt was made to read an empty buffer
+	if(buf->empty == 0)
+	{
+		memcpy(data,&buf->buf[buf->out][0], 13*sizeof(unsigned int));	//read data from buffer
+		if (++buf->out == CANQUEUEDEPTH) buf->out = 0;					//increment read pointer with wrap
+		if (buf->in == buf->out) buf->empty = 1;						//test for empty
+		buf->full = 0;													//just read, can't be full
+		buf->count -=1;													//decrement counter
+		return buf->count;
+	}
+	else
+	{
+		return -1;
+	}
+}

@@ -10,20 +10,43 @@
 #include "MCP2515.h"		//MCP2515 functions
 #include "MCP2515_DEFS.h"
 
-#define CANQUEUEDEPTH 10
+//The Default CAN frequency, index to list of standard values
+//0 = 1Mbit
+//1 = 500Kbit
+//2 = 250Kbit
+//3 = 125Kbit
+//4 = 62.5Kbit
+#define CANFREQ 1
 
-stopwatch_struct* mirror_can_watch;
+const unsigned int MaskConfig[32] = {0x0000,0x0000,0x0000,0x0000,
+									 0x0000,0x0000,0x0000,0x0000,
+									 0x0000,0x0000,0x0000,0x0000,
+									 0x0000,0x0000,0x0000,0x0000,
+									 0x0000,0x0000,0x0000,0x0000,
+									 0x0000,0x0000,0x0000,0x0000,
+									 0x0000,0x0000,0x0000,0x0000,
+									 0x0000,0x0000,0x0000,0x0000};
+
+void MCP2515_Total_Reset(int delay);								//does a total reset of the MCP2515 system. stays off bus for delay before coming back on line.
+
+
+stopwatch_struct* mirror_Ato2_watch;
+stopwatch_struct* mirror_2toA_watch0;
+stopwatch_struct* mirror_2toA_watch1;
+stopwatch_struct* mirror_2toA_watch2;
+stopwatch_struct* canA_watch;
+stopwatch_struct* can2_watch;
+
 
 ops_struct ops_temp;
 data_struct data_temp;
-stopwatch_struct* conv_watch;
 
-//variables for the CAN message queue
-int CANQueueIN = 0;
-int CANQueueOUT = 0;
-int CANQueueFULL = 0;
-int CANQueueEMPTY = 1;
-unsigned int CANQueue_raw[CANQUEUEDEPTH][13];
+//buffers
+buffer_struct Buf_Ato2;
+buffer_struct Buf_2toA;
+
+int MCP_TXn_Ready = 0;
+
 
 void SensorCov()
 {
@@ -33,7 +56,7 @@ void SensorCov()
 		LatchStruct();
 		SensorCovMeasure();
 	//	UpdateStruct();
-		FillCANData();
+	//	FillCANData();
 	}
 	SensorCovDeInit();
 }
@@ -41,8 +64,25 @@ void SensorCov()
 void SensorCovInit()
 {
 
-	MCP2515_spi_init();								//initialize SPI port and GPIO associated with the MCP2515
-	PgmInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515
+	/**************** config ISR for MCP2515 */
+
+	// MCP2515 !int is on GPIO20 is XINT1
+	EALLOW;
+	GpioIntRegs.GPIOXINT1SEL.bit.GPIOSEL = 20;   // XINT1 is GPIO20
+	EDIS;
+
+	// Configure XINT1
+	XIntruptRegs.XINT1CR.bit.POLARITY = 0;      // Falling edge interrupt
+
+	// Enable XINT1
+	XIntruptRegs.XINT1CR.bit.ENABLE = 1;        // Enable XINT1
+
+
+	PieCtrlRegs.PIEIER1.bit.INTx4 = 1;          // Enable PIE Group 1 INT4
+	IFR &= ~M_INT1;
+	IER |= M_INT1;
+	/********************/
+
 
 	//CONFIG GP_BUTTON
 	ConfigGPButton();
@@ -50,14 +90,15 @@ void SensorCovInit()
 	ConfigLED1();
 	SETLED0();
 	SETLED1();
-	//clear CAN Queue
-	CANQueueIN = 0;
-	CANQueueOUT = 0;
-	CANQueueFULL = 0;
-	CANQueueEMPTY = 1;
 
-	mirror_can_watch = StartStopWatch(100);		//start stopwatch for timeout
-	conv_watch = StartStopWatch(50000);
+	MCP2515_Total_Reset(0);
+
+	mirror_Ato2_watch = StartStopWatch(500);		//start stopwatch for Ato2 timeout
+	mirror_2toA_watch0 = StartStopWatch(500);    	//start stopwatch for 2toA timeout
+	mirror_2toA_watch1 = StartStopWatch(500);    	//start stopwatch for 2toA timeout
+	mirror_2toA_watch2 = StartStopWatch(500);    	//start stopwatch for 2toA timeout
+	canA_watch = StartStopWatch(50000);				//start stopwatch for canA bus status
+	can2_watch = StartStopWatch(50000);				//start stopwatch for can2 bus status
 }
 
 
@@ -70,45 +111,87 @@ void LatchStruct()
 
 void SensorCovMeasure()
 {
+	int tmp;
 	struct ECAN_REGS ECanaShadow;	//shadow structure for modifying CAN registers
+	unsigned int tmp_buffer[13];	//temporary buffer for messages
 
-	//this code takes care of getting messages from the MCP2515
-	if(GpioDataRegs.GPADAT.bit.GPIO20 == 0 ) // poll MCP2515 interrupt pin(active low)
-		if(CANQueueFULL == 0)
+//*********************************************************************MCP2515 service*******************************************************************************************
+
+
+	//send messages from 2 to A
+	if (MCP_TXn_Ready != 0)																//check that at least one of the transmit buffers is ready for sending
+		if (Buf_2toA.empty == 0)														//check that we have a message to send
 		{
-			//read CAN message from MCP2515
-			SR2_SPI(MCP_READ, MCP_RXB0SIDH, 13, &CANQueue_raw[CANQueueIN][0]);	//read raw can message
-			MCP2515Write(MCP_CANINTF, 0x00);									//clear interrupt
-			if (++CANQueueIN == CANQUEUEDEPTH) CANQueueIN = 0;					//increment with wrap
-			if (CANQueueIN == CANQueueOUT) CANQueueFULL = 1;					//test for full
-			CANQueueEMPTY = 0;													//just got a message, can't be empty
-
-			//reset Stopwatch
-			StopWatchRestart(conv_watch);
-			ops.Flags.fields.CANA_status = 1;									//indicate CAN bus A status
-			CLEARLED0();
+			if (MCP_TXn_Ready & 0x01)													//try to send using TXB0
+			{
+				ops.can2toA.fields.Buffer_level = Buffer_MCPFillMessage(&Buf_2toA, 0);	//add message from buffer
+				MCP_TXn_Ready &= 0x06;													//clear TXB0 ready flag
+				MCP2515Write(MCP_TXB0CTRL,0x09);										//flag message for transmission
+				StopWatchRestart(mirror_2toA_watch0);									//start timeout counter
+			}
+			else if (MCP_TXn_Ready & 0x02)												//try to send using TXB1
+			{
+				ops.can2toA.fields.Buffer_level = Buffer_MCPFillMessage(&Buf_2toA, 1);	//add message from buffer
+				MCP_TXn_Ready &= 0x05;													//clear TXB0 ready flag
+				MCP2515Write(MCP_TXB1CTRL,0x0A);										//flag message for transmission
+				StopWatchRestart(mirror_2toA_watch1);									//start timeout counter
+			}
+			else if (MCP_TXn_Ready & 0x04)												//try to send using TXB2
+			{
+				ops.can2toA.fields.Buffer_level = Buffer_MCPFillMessage(&Buf_2toA, 2);	//add message from buffer
+				MCP_TXn_Ready &= 0x03;													//clear TXB0 ready flag
+				MCP2515Write(MCP_TXB2CTRL,0x0B);										//flag message for transmission
+				StopWatchRestart(mirror_2toA_watch2);									//start timeout counter
+			}
+			else
+				tmp=0;	//serious problem if it ever gets here
 		}
-		else			//CAN Queue overflow do some error stuff
+
+	//watch for send timeouts
+	if ((MCP_TXn_Ready & 0x01) == 0)														//check if TXB0 has a pending message
+	{
+		if(isStopWatchComplete(mirror_2toA_watch0))
 		{
-			//reset Stopwatch (CAN bus A is still active, even if we overflowed
-			StopWatchRestart(conv_watch);
-			ops.Flags.fields.CANA_status = 1;									//indicate CAN bus A status
-			CLEARLED0();
-
-			//clear MCP2515 receive interrupt, so we don't block future reception
-			MCP2515Write(MCP_CANINTF, 0x00);									//clear interrupt
-
-			//increment overflow counter in ops
-			ops.Flags.fields.Overflow += 1;
+			ops.can2toA.fields.Write_Timeouts += 1;
+			MCP2515Write(MCP_TXB0CTRL, 0x01);													//clear send request
+			MCP_TXn_Ready |= 0x01;															//flag transmitter as ready
 		}
+	}
 
-	//This code takes care of sending messages out on CAN bus 2
+	if ((MCP_TXn_Ready & 0x02) == 0)														//check if TXB1 has a pending message
+	{
+		if(isStopWatchComplete(mirror_2toA_watch1))
+		{
+			ops.can2toA.fields.Write_Timeouts += 1;
+			MCP2515Write(MCP_TXB1CTRL, 0x02);													//clear send request
+			MCP_TXn_Ready |= 0x02;															//flag transmitter as ready
+		}
+	}
+	if ((MCP_TXn_Ready & 0x04) == 0)														//check if TXB1 has a pending message
+	{
+		if(isStopWatchComplete(mirror_2toA_watch2))
+		{
+			ops.can2toA.fields.Write_Timeouts += 1;
+			MCP2515Write(MCP_TXB2CTRL, 0x03);													//clear send request
+			MCP_TXn_Ready |= 0x04;															//flag transmitter as ready
+		}
+	}
+
+
+	//error checking
+	if (ops.canAto2.fields.flags & 0x10)				//check for off-bus condition
+		MCP2515_Total_Reset(500);						//reset the MCP2515 after 500 ms
+
+//*****************************************************************end MCP2515 service********************************************************************************************
+
+//***********************************************This code takes care of sending messages out on CAN bus 2************************************************************************
 	ECanaShadow.CANTRS.all = ECanaRegs.CANTRS.all;			//get CAN transmit status register
 	if ((ECanaShadow.CANTRS.all & (1 << 0x04)) == 0)		//check if mailbox 4 is not sending
 	{
-		if(CANQueueEMPTY == 0)								//check if there are messages to send
+		tmp = Buffer_Read(&Buf_Ato2, tmp_buffer);			//get can message
+		if(tmp != -1)										//check if there are messages to send
 		{
-			StopWatchRestart(mirror_can_watch);				//restart stopwatch for timeout
+			StopWatchRestart(mirror_Ato2_watch);					//restart stopwatch for timeout
 
 			//set up the actual CAN transmission
 			EALLOW;
@@ -122,16 +205,16 @@ void SensorCovMeasure()
 
 				//message ID is: bit 31 = EXID, bit 30,29 = acceptance bits, 0 for transmit, 28:0 ID, ID is left aligned
 				ECanaMboxes.MBOX4.MSGID.all = 0;
-				if (CANQueue_raw[CANQueueOUT][1] & 0x0008)
+				if (tmp_buffer[1] & 0x0008)
 				{//extended ID
-					ECanaMboxes.MBOX4.MSGID.all = (0x80000000L | (CANQueue_raw[CANQueueOUT][1] & 0x00000003L) << 27 | (CANQueue_raw[CANQueueOUT][2] & 0x000000FFL) << 19 | (CANQueue_raw[CANQueueOUT][3] & 0x000000FFL) << 10 | (CANQueue_raw[CANQueueOUT][0] & 0x000000FFL) << 3 | (CANQueue_raw[CANQueueOUT][1] & 0x000000E0L) >> 5);
+					ECanaMboxes.MBOX4.MSGID.all = (0x80000000L | (tmp_buffer[1] & 0x00000003L) << 27 | (tmp_buffer[2] & 0x000000FFL) << 19 | (tmp_buffer[3] & 0x000000FFL) << 10 | (tmp_buffer[0] & 0x000000FFL) << 3 | (tmp_buffer[1] & 0x000000E0L) >> 5);
 				}
 				else
 				{//standard ID
-					ECanaMboxes.MBOX4.MSGID.bit.STDMSGID = (0x00000000L | (CANQueue_raw[CANQueueOUT][0] & 0x000000FFL) << 3 | (CANQueue_raw[CANQueueOUT][1] & 0x000000E0L) >> 5);
+					ECanaMboxes.MBOX4.MSGID.bit.STDMSGID = (0x00000000L | (tmp_buffer[0] & 0x000000FFL) << 3 | (tmp_buffer[1] & 0x000000E0L) >> 5);
 				}
 
-				ECanaMboxes.MBOX4.MSGCTRL.bit.DLC = CANQueue_raw[CANQueueOUT][4] & 0x000F;			//DLC
+				ECanaMboxes.MBOX4.MSGCTRL.bit.DLC = tmp_buffer[4] & 0x000F;			//DLC
 				ECanaShadow.CANMD.bit.MD4 = 0; 			//transmit
 				ECanaShadow.CANME.bit.ME4 = 1;			//enable
 
@@ -145,8 +228,8 @@ void SensorCovMeasure()
 				ECanaRegs.CANMC.all = ECanaShadow.CANMC.all;	//set regs
 
 				//set data
-				ECanaMboxes.MBOX4.MDL.all = (CANQueue_raw[CANQueueOUT][5] & 0x000000FFL) | (CANQueue_raw[CANQueueOUT][6] & 0x000000FFL) << 8 | (CANQueue_raw[CANQueueOUT][7] & 0x000000FFL) << 16 | (CANQueue_raw[CANQueueOUT][8] & 0x000000FFL) << 24;					//fill data
-				ECanaMboxes.MBOX4.MDH.all = (CANQueue_raw[CANQueueOUT][9] & 0x000000FFL) | (CANQueue_raw[CANQueueOUT][10] & 0x000000FFL) << 8 | (CANQueue_raw[CANQueueOUT][11] & 0x000000FFL) << 16 | (CANQueue_raw[CANQueueOUT][12] & 0x000000FFL) << 24;
+				ECanaMboxes.MBOX4.MDL.all = (tmp_buffer[5] & 0x000000FFL) | (tmp_buffer[6] & 0x000000FFL) << 8 | (tmp_buffer[7] & 0x000000FFL) << 16 | (tmp_buffer[8] & 0x000000FFL) << 24;					//fill data
+				ECanaMboxes.MBOX4.MDH.all = (tmp_buffer[9] & 0x000000FFL) | (tmp_buffer[10] & 0x000000FFL) << 8 | (tmp_buffer[11] & 0x000000FFL) << 16 | (tmp_buffer[12] & 0x000000FFL) << 24;
 
 				ECanaShadow.CANMC.bit.MBNR = 0;					//clear request for mailbox 4
 				ECanaShadow.CANMC.bit.CDR = 0;					//clear change data field request
@@ -157,19 +240,15 @@ void SensorCovMeasure()
 			//request that the mailbox be sent
 			ECanaShadow.CANTRS.all = 1 << 0x04;				//mark mailbox 4 for transmit
 			ECanaRegs.CANTRS.all = ECanaShadow.CANTRS.all;	//set in real registers
-
-			if (++CANQueueOUT == CANQUEUEDEPTH) CANQueueOUT = 0;					//increment with wrap
-			CANQueueFULL = 0;														//just pulled a message, can't be full
-			if (CANQueueIN == CANQueueOUT) CANQueueEMPTY = 1;						//test for empty
 		}
 	}
 	else	//mailbox 4 is sending
 	{
-		if(isStopWatchComplete(mirror_can_watch) == 1)
+		if(isStopWatchComplete(mirror_Ato2_watch) == 1)
 		{
 			//error on CAN send timeout
 			//increment timeout counter and clear mailbox 4
-			ops.Flags.fields.Timeout += 1;
+			ops.canAto2.fields.Write_Timeouts += 1;
 
 			ECanaShadow.CANTRR.all = ECanaRegs.CANTRR.all;
 			ECanaShadow.CANTRR.bit.TRR4 = 1;
@@ -180,46 +259,65 @@ void SensorCovMeasure()
 		}
 	}
 
-    if (isStopWatchComplete(conv_watch) == 1)
+
+//****************************check for can busses down**************************
+    if (isStopWatchComplete(canA_watch) == 1)
 	{
 		//indicate CAN bus A down
-    	ops.Flags.fields.CANA_status = 0;
+    	ops.canAto2.fields.can_error = 1;
     	SETLED0();
-    	ops.Flags.fields.Overflow += 1;
 	}
+    else
+    {
+    	//indicate CAN bus A up
+    	ops.canAto2.fields.can_error = 0;
+    	CLEARLED0();
+    }
+
+    if (isStopWatchComplete(can2_watch) == 1)
+    {
+    	//indicate CAN bus 2 down
+       	ops.can2toA.fields.can_error = 1;
+       	SETLED1();
+    }
+    else
+    {
+    	//indicate CAN bus 2 up
+    	ops.can2toA.fields.can_error = 0;
+    	CLEARLED0();
+    }
+
 }
-/*
-void UpdateStruct()
-{
-	memcpy(&data, &data_temp, sizeof(struct DATA));
-
-	//todo USER: UpdateStruct
-	//update with node specific op changes
-
-	//if ops is not changed outside of sensor conversion copy temp over, otherwise don't change
-
-	//Change bit is only set by ops changes outside of SensorCov.
-	if (ops.Change.bit.State == 0)
-	{
-		ops.State = ops_temp.State;
-	}
-
-	if (ops.Change.bit.Flags == 0)
-	{
-		//only cov error happens inside of conversion so all other changes are considered correct.
-		//update accordingly to correct cov_errors
-		ops.Flags.bit.cov_error = ops_temp.Flags.bit.cov_error;
-	}
-	ops.Change.all = 0;	//clear change states
-}
-*/
 
 void SensorCovDeInit()
 {
-	//todo USER: SensorCovDeInit()
-	MCP2515_reset(1);				//hold MCP2515 in reset
-	StopStopWatch(conv_watch);
+	MCP2515_reset(1);					//hold MCP2515 in reset
+	StopStopWatch(mirror_Ato2_watch);
+	StopStopWatch(mirror_2toA_watch0);
+	StopStopWatch(mirror_2toA_watch1);
+	StopStopWatch(mirror_2toA_watch2);
+	StopStopWatch(canA_watch);
+	StopStopWatch(can2_watch);
 	SETLED0();
 	SETLED1();
-	StopStopWatch(mirror_can_watch);
+}
+
+void MCP2515_Total_Reset(int delay)
+{
+	int i,j;
+	if (delay > 0)
+		for(j=0;j<delay;j++)
+			for (i=0;i<10;i++)
+				DELAY_US(100);
+
+	MCP2515_spi_init();								//initialize SPI port and GPIO associated with the MCP2515
+	PgmInitMCP2515(((1<<CANFREQ)-1), MaskConfig);	//initialize MCP2515
+
+	Buffer_Clear(&Buf_Ato2);
+	ops.canAto2.all = 0;
+
+	Buffer_Clear(&Buf_2toA);
+	ops.can2toA.all = 0;
+
+	MCP_TXn_Ready = 0x07;
 }

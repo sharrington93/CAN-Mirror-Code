@@ -115,9 +115,9 @@ SECTIONS
 {
 
    /* Allocate program areas: */
-   .cinit              : > FLASHC      PAGE = 0
+   .cinit              : > FLASHE      PAGE = 0
    .pinit              : > FLASHC,     PAGE = 0
-   .text               : > FLASHC      PAGE = 0
+   .text               : > FLASHF      PAGE = 0
 
 
    codestart           : > BEGIN       PAGE = 0
@@ -147,7 +147,7 @@ SECTIONS
    /* Initalized sections go in Flash */
    /* For SDFlash to program these, they must be allocated to page 0 */
    .econst             : > FLASHC      PAGE = 0
-   .switch             : > FLASHC      PAGE = 0
+   .switch             : > FLASHE      PAGE = 0
 
    /* Allocate IQ math areas: */
    IQmath              : > FLASHC      PAGE = 0            /* Math Code */
