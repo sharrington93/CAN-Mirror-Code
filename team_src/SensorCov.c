@@ -10,36 +10,7 @@
 #include "MCP2515.h"		//MCP2515 functions
 #include "MCP2515_DEFS.h"
 
-<<<<<<< Updated upstream
 #define CANQUEUEDEPTH 10
-=======
-//The Default CAN frequency, index to list of standard values
-//0 = 1Mbit
-//1 = 500Kbit
-//2 = 250Kbit
-//3 = 125Kbit
-//4 = 62.5Kbit
-#define CANFREQ 0
-
-const unsigned int MaskConfig[32] = {0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000,
-									 0x0000,0x0000,0x0000,0x0000};
-
-void MCP2515_Total_Reset(int delay);								//does a total reset of the MCP2515 system. stays off bus for delay before coming back on line.
-
-
-stopwatch_struct* mirror_Ato2_watch;
-stopwatch_struct* mirror_2toA_watch0;
-stopwatch_struct* mirror_2toA_watch1;
-stopwatch_struct* mirror_2toA_watch2;
-stopwatch_struct* canA_watch;
-stopwatch_struct* can2_watch;
->>>>>>> Stashed changes
 
 stopwatch_struct* mirror_can_watch;
 
@@ -190,10 +161,6 @@ void SensorCovMeasure()
 			if (++CANQueueOUT == CANQUEUEDEPTH) CANQueueOUT = 0;					//increment with wrap
 			CANQueueFULL = 0;														//just pulled a message, can't be full
 			if (CANQueueIN == CANQueueOUT) CANQueueEMPTY = 1;						//test for empty
-		}
-		else
-		{
-			ops.canAto2.fields.flags = 1;
 		}
 	}
 	else	//mailbox 4 is sending
