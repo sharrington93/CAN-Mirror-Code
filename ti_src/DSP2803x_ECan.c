@@ -131,7 +131,7 @@ struct ECAN_REGS ECanaShadow;
     ECanaShadow.CANBTC.bit.TSEG2REG = 2;
     ECanaShadow.CANBTC.bit.SJWREG = 1;
 
-    ECanaShadow.CANBTC.bit.BRPREG = 3;
+    ECanaShadow.CANBTC.bit.BRPREG = 1;
     ECanaShadow.CANBTC.bit.TSEG1REG = 10;
     ECanaShadow.CANBTC.bit.TSEG2REG = 2;
     ECanaShadow.CANBTC.bit.SJWREG = 1;
