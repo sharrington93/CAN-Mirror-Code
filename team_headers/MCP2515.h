@@ -22,15 +22,5 @@ extern int Buffer_MCPFillMessage(buffer_struct* buf, int txbn);
 extern int Buffer_Read(buffer_struct* buf, unsigned int* data);
 extern int Buffer_Write(buffer_struct* buf, unsigned int* data);
 
-<<<<<<< HEAD
-//The Default CAN frequency, index to list of standard values
-//0 = 1Mbit
-//1 = 500Kbit
-//2 = 250Kbit
-//3 = 125Kbit
-//4 = 62.5Kbit
-#define CANFREQ 0
-=======
->>>>>>> 767516eea0f920b78e2659af299939edaf60e35c
 
 #endif

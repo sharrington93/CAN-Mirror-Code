@@ -16,7 +16,7 @@
 //2 = 250Kbit
 //3 = 125Kbit
 //4 = 62.5Kbit
-#define CANFREQ 1
+#define CANFREQ 0
 
 const unsigned int MaskConfig[32] = {0x0000,0x0000,0x0000,0x0000,
 									 0x0000,0x0000,0x0000,0x0000,
