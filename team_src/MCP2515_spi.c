@@ -60,6 +60,28 @@ void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsign
 	EINT;										//enable interrupts
 }
 
+void READ_RX_SPI(unsigned int address, unsigned int *buf)
+{
+	unsigned int i;
+	DINT;
+
+	SPI_CS_LOW();
+
+	SpibRegs.SPITXBUF=(address<<8);				//send byte
+	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);		//wait for response
+	i = SpibRegs.SPIRXBUF;						//dummy read
+
+	for(i = 0; i < 13; i++)
+	{
+		SpibRegs.SPITXBUF=(buf[i]<<8);			//send byte
+		while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
+		buf[i] = SpibRegs.SPIRXBUF;				//save response
+	}
+	SPI_CS_HIGH();								//set CS high
+
+	EINT;										//enable interrupts
+}
+
 void MCP2515_reset(unsigned int rst)
 {
 	if (rst)

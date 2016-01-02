@@ -9,6 +9,7 @@
 
 extern void SR_SPI(unsigned int length, unsigned int *buf);
 extern void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsigned int *buf);
+extern void READ_RX_SPI(unsigned int address, unsigned int *buf);
 extern void MCP2515_reset(unsigned int rst);
 extern void MCP2515_spi_init();
 
