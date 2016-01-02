@@ -364,7 +364,6 @@ int Buffer_MCPGetMessage(buffer_struct* buf, int rxbn)
 		else
 			SR2_SPI(MCP_READ, MCP_RXB1SIDH, 13, &buf->buf[buf->in][0]);	//read raw can message
 
-		SR2_SPI(MCP_READ, MCP_EFLG, 1, &buf->errors);
 		if (++buf->in == CANQUEUEDEPTH) buf->in = 0;					//increment with wrap
 		if (buf->in == buf->out) buf->full = 1;							//test for full
 		buf->empty = 0;													//just wrote, can't be empty
