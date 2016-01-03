@@ -10,16 +10,11 @@
 #define	SPI_CS_LOW()	GpioDataRegs.GPACLEAR.bit.GPIO15 = 1
 #define	SPI_CS_HIGH()	GpioDataRegs.GPASET.bit.GPIO15 = 1
 
-//function prototypes
-void SR_SPI(unsigned int length, unsigned int *buf);
-void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsigned int *buf);
-void MCP2515_reset(unsigned int rst);
-
 extern buffer_struct Buf_Ato2;
 
 unsigned int *current_message;
 unsigned int byte_num;
-unsigned int tx_bytes;
+unsigned int rx_bytes;
 
 void SR_SPI(unsigned int length, unsigned int *buf)
 {
@@ -38,47 +33,73 @@ void SR_SPI(unsigned int length, unsigned int *buf)
 	EINT;										//re-enable interrupts
 }
 
-// Deprecated
-void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsigned int *buf)
+/*
+ * This function uses the MCP2515 Command Byte (byte1) and Address (byte2) to request
+ * data from one of it's registers to send back. To obtain data from multiple address
+ * registers into the buffer, pass the lowest address and the RX_length that specifies
+ * the amount of addresses to read.
+ *
+ * Byte 1: MCP2515 Command
+ * Byte 2: MCP2515 Register Address
+ * rx_length: Total amount of consecutive registers to read from MCP2515
+ * buf: Point to message buffer which the data will be stored in. NOTE: Buffer not
+ * guaranteed to hold valid data until Buf_Ato2.in increments.
+ *
+ * Example:
+ */
+int SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int rx_length, unsigned int *message_buf)
 {
-	unsigned int i;
-
-	DINT;										//disable interrupts during sending
-
-	SPI_CS_LOW();								//set CS low
-
-	SpibRegs.SPITXBUF=(byte1<<8);				//send byte
-	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);		//wait for response
-	i = SpibRegs.SPIRXBUF;						//dummy read
-
-	SpibRegs.SPITXBUF=(byte2<<8);				//send byte
-	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);		//wait for response
-	i = SpibRegs.SPIRXBUF;						//dummy read
-
-	for(i=0;i<length;i++)						//loop over length
+	if(SpibRegs.SPIFFTX.bit.TXFFST == 0 && SpibRegs.SPIFFRX.bit.RXFFST == 0)
 	{
-		SpibRegs.SPITXBUF=(buf[i]<<8);			//send byte
-		while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-		buf[i] = SpibRegs.SPIRXBUF;				//save response
+		current_message = message_buf;
+		byte_num = 0;
+		rx_bytes = rx_length;
+		DINT;										//disable interrupts during sending
+
+		SPI_CS_LOW();								//set CS low
+		SpibRegs.SPITXBUF=(byte1<<8);				//send byte
+		SpibRegs.SPITXBUF=(byte2<<8);				//send byte
+
+		EINT;										//enable interrupts
+		return 0;
 	}
-	SPI_CS_HIGH();								//set CS high
-
-	EINT;										//enable interrupts
+	else
+	{
+		return -1; //Can not send SPI
+	}
 }
 
-void READ_RX_SPI(unsigned int address, unsigned int *buf, unsigned int tx_length)
+/*
+ * This function uses the special Read RX command on the MCP2515 to obtain data
+ * from a receive buffer with some of the overhead removed. This command also automatically
+ * clears the MCP2515 status flag stating data is ready in the receive buffer (further reducing
+ * overhead).
+ *
+ * Address: RX Read address to start at
+ * Buf: Message buffer the returned data will be stored into
+ * RX Length: Amount of consectutive addresses to read and store
+ *
+ * Example: Read_RX_SPI(MCP_READRX0, &buf->buf[buf->in][0], 13)
+ */
+int Read_RX_SPI(unsigned int address, unsigned int *message_buf, unsigned int rx_length)
 {
-	current_message = buf;
-	byte_num = 0;
-	tx_bytes = tx_length;
-	DINT;
+	//Check if SPI transmission already occuring
+	if(SpibRegs.SPIFFTX.bit.TXFFST == 0 && SpibRegs.SPIFFRX.bit.RXFFST == 0)
+	{
+		current_message = message_buf;
+		byte_num = 0;
+		rx_bytes = rx_length;
+		DINT;
 
-	SPI_CS_LOW();
-	SpibRegs.SPITXBUF=(address<<8);				//send byte
+		SPI_CS_LOW();
+		SpibRegs.SPITXBUF=(address<<8);				//send byte
 
-	EINT;										//enable interrupts
+		EINT;										//enable interrupts
+		return 0;
+	}
+	else
+		return -1; //Can not send SPI
 }
-
 void MCP2515_reset(unsigned int rst)
 {
 	if (rst)
@@ -98,7 +119,7 @@ void MCP2515_spi_init()
 
    SpibRegs.SPICCR.all=0x0047;           //8-bit no loopback
 
-   SpibRegs.SPICTL.all=0x0006;           //// Enable master mode, normal phase,enable talk, and SPI int disabled.
+   SpibRegs.SPICTL.all=0x0007;           //// Enable master mode, normal phase,enable talk, and SPI int enabled.
 
    SpibRegs.SPISTS.all=0x0000;
    SpibRegs.SPIBRR = 6;                	 //MCP2515 can take 10MHz SPI, set to 8.5MHz ( 60MHz/(SPIBRR+1) ) to be safe
@@ -196,19 +217,19 @@ void MCP2515_spi_init()
 
 }
 
-// INT6.3
+// Interrupt for receiving a byte over SPI
 __interrupt void SPIRXINTB_ISR(void)    // SPI-B
 {
 	current_message[byte_num] = SpibRegs.SPIRXBUF;
 
-	if(byte_num == tx_bytes)		//We have sent and now received all bytes.
+	if(byte_num == rx_bytes)		//We have sent and now received all bytes.
 	{
 		SPI_CS_HIGH();				//set CS high
 		// Increase buffer length so that message can be mirrored now
-		if (++Buf_Ato2.in == CANQUEUEDEPTH) Buf_Ato2->in = 0;					//increment with wrap
-		if (Buf_Ato2->in == Buf_Ato2->out) Buf_Ato2->full = 1;							//test for full
-		Buf_Ato2->empty = 0;													//just wrote, can't be empty
-		Buf_Ato2->count +=1;
+		if (++Buf_Ato2.in == CANQUEUEDEPTH) Buf_Ato2.in = 0;					//increment with wrap
+		if (Buf_Ato2.in == Buf_Ato2.out) Buf_Ato2.full = 1;							//test for full
+		Buf_Ato2.empty = 0;													//just wrote, can't be empty
+		Buf_Ato2.count +=1;
 		XINT1_ISR();				//Return to XINT1 to ensure no more flags present
 	}
 

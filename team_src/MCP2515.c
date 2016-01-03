@@ -6,8 +6,6 @@
 // User must provide MCP2515_reset(uint16 rst); which sets the pin used as the MCP2515 reset high or low (rst = 1 is pin low, rst = 0  is pin high)
 
 #include "all.h"
-#include "MCP2515_DEFS.h"
-#include "MCP2515_spi.h"
 
 extern void DSP28x_usDelay(unsigned long Count);
 #define CPU_RATE   16.667L   // for a 60MHz CPU clock speed (SYSCLKOUT)
@@ -361,11 +359,11 @@ int Buffer_MCPGetMessage(buffer_struct* buf, int rxbn)
 	{
 		if(rxbn == 0)
 		{
-			READ_RX_SPI(MCP_READRX0, &buf->buf[buf->in][0]);
+			Read_RX_SPI(MCP_READRX0, &buf->buf[buf->in][0], 13);
 		}
 		else
 		{
-			READ_RX_SPI(MCP_READRX2, &buf->buf[buf->in][0]);
+			Read_RX_SPI(MCP_READRX2, &buf->buf[buf->in][0], 13);
 		}
 		return 0;
 	}

@@ -1,6 +1,5 @@
 //MCP2515 functions
 
-#include "MCP2515_DEFS.h"
 
 #ifndef MCP2515_H
 
