@@ -750,9 +750,6 @@ __interrupt void  XINT1_ISR(void)
 				ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
 				// Todo possible do something else about overflows
 			}
-			MCP_ResetFlags[0] = 1;								// Mask rxbuf0 bit
-			MCP_ResetFlags[1] = 0;								// Set data byte as all 0
-			SR2_SPI(MCP_BITMOD, MCP_CANINTF, 2, MCP_ResetFlags);
 		}
 		if(GpioDataRegs.GPBDAT.bit.GPIO32 == 0)	//RXBUF1
 		{
@@ -767,9 +764,6 @@ __interrupt void  XINT1_ISR(void)
 				ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
 				// Todo possible do something else about overflows
 			}
-			MCP_ResetFlags[0] = 2;								// Mask rxbuf1 bit
-			MCP_ResetFlags[1] = 0;								// Set data byte as all 0
-			SR2_SPI(MCP_BITMOD, MCP_CANINTF, 2, MCP_ResetFlags);
 		}
 		else if(GpioDataRegs.GPADAT.bit.GPIO22 == 0 && GpioDataRegs.GPBDAT.bit.GPIO32 == 0)
 		{
