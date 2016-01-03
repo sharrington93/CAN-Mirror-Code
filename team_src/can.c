@@ -735,99 +735,92 @@ __interrupt void  XINT1_ISR(void)
 	int tmp;
 	// Insert ISR Code here
 
-	MCP2515ReadBlock(MCP_CANINTF, MCP_ShadowRegs, 2);		//read the status registers
-	//MCP_ShadowRegs[0] = CANINTF
-	//MCP_ShadowRegs[1] = EFLG
-
-	ops.canAto2.fields.flags = MCP_ShadowRegs[1] >> 1;			//use flags in ops to watch the error flags
-
-	if(MCP_ShadowRegs[0] & MCP_CANINTF_MERRF)
+	while (GpioDataRegs.GPADAT.bit.GPIO20 == 0) // While MCP2515 interrupt pin still high
 	{
-		//this catches all message transmit/receive errors
-	}
-
-	if(MCP_ShadowRegs[0] & MCP_CANINTF_WAKIF)
-	{
-	}
-
-	if((MCP_ShadowRegs[0] & MCP_CANINTF_ERRIF) | (MCP_ShadowRegs[1] != 0))
-	{
-		//check EFLG to see what generated the error
-		if(MCP_ShadowRegs[1] & MCP_EFLG_RX1OVR);
-		if(MCP_ShadowRegs[1] & MCP_EFLG_RX0OVR);
-		if(MCP_ShadowRegs[1] & MCP_EFLG_TXBO);
-		if(MCP_ShadowRegs[1] & MCP_EFLG_TXEP);
-		if(MCP_ShadowRegs[1] & MCP_EFLG_RXEP);
-		if(MCP_ShadowRegs[1] & MCP_EFLG_TXWAR);
-		if(MCP_ShadowRegs[1] & MCP_EFLG_RXWAR);
-		if(MCP_ShadowRegs[1] & MCP_EFLG_EWARN);
-	}
-
-	if(MCP_ShadowRegs[0] & MCP_CANINTF_TX2IF)
-	{
-		MCP_TXn_Ready |= 0x04;	//Flag TX2 as ready for a message
-	}
-
-	if(MCP_ShadowRegs[0] & MCP_CANINTF_TX1IF)
-	{
-		MCP_TXn_Ready |= 0x02;	//Flag TX1 as ready for a message
-	}
-
-	if(MCP_ShadowRegs[0] & MCP_CANINTF_TX0IF)
-	{
-		MCP_TXn_Ready |= 0x01;	//Flag TX0 as ready for a message
-	}
-
-	if(MCP_ShadowRegs[0] & MCP_CANINTF_RX0IF)
-	{
-		StopWatchRestart(canA_watch);					//received message on A, therefore A is not dead
-		tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
-		if (tmp != -1)
+		if(GpioDataRegs.GPADAT.bit.GPIO22 == 0)	//RXBUF0
 		{
-			ops.canAto2.fields.Buffer_level = tmp;		//update buffer level
+			StopWatchRestart(canA_watch);					//received message on A, therefore A is not dead
+			tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
+			if (tmp != -1)
+			{
+				ops.canAto2.fields.Buffer_level = tmp;		//update buffer level
+			}
+			else
+			{
+				ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
+				// Todo possible do something else about overflows
+			}
+			MCP_ResetFlags[0] = 1;								// Mask rxbuf0 bit
+			MCP_ResetFlags[1] = 0;								// Set data byte as all 0
+			SR2_SPI(MCP_BITMOD, MCP_CANINTF, 2, MCP_ResetFlags);
 		}
-		else
+		if(GpioDataRegs.GPBDAT.bit.GPIO32 == 0)	//RXBUF1
 		{
-			ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
-			// Todo possible do something else about overflows
+			StopWatchRestart(canA_watch);					//received message on A, therefore A is not dead
+			tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
+			if (tmp != -1)
+			{
+				ops.canAto2.fields.Buffer_level = tmp;		//update buffer level
+			}
+			else
+			{
+				ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
+				// Todo possible do something else about overflows
+			}
+			MCP_ResetFlags[0] = 2;								// Mask rxbuf1 bit
+			MCP_ResetFlags[1] = 0;								// Set data byte as all 0
+			SR2_SPI(MCP_BITMOD, MCP_CANINTF, 2, MCP_ResetFlags);
+		}
+		else if(GpioDataRegs.GPADAT.bit.GPIO22 == 0 && GpioDataRegs.GPBDAT.bit.GPIO32 == 0)
+		{
+			MCP2515ReadBlock(MCP_CANINTF, MCP_ShadowRegs, 2);		//read the status registers
+			ops.canAto2.fields.flags = MCP_ShadowRegs[1] >> 1;			//use flags in ops to watch the error flags
+
+			if(MCP_ShadowRegs[0] & MCP_CANINTF_MERRF)
+			{
+				//this catches all message transmit/receive errors
+			}
+
+			if(MCP_ShadowRegs[0] & MCP_CANINTF_WAKIF)
+			{
+			}
+
+			if((MCP_ShadowRegs[0] & MCP_CANINTF_ERRIF) | (MCP_ShadowRegs[1] != 0))
+			{
+				//check EFLG to see what generated the error
+				if(MCP_ShadowRegs[1] & MCP_EFLG_RX1OVR);
+				if(MCP_ShadowRegs[1] & MCP_EFLG_RX0OVR);
+				if(MCP_ShadowRegs[1] & MCP_EFLG_TXBO);
+				if(MCP_ShadowRegs[1] & MCP_EFLG_TXEP);
+				if(MCP_ShadowRegs[1] & MCP_EFLG_RXEP);
+				if(MCP_ShadowRegs[1] & MCP_EFLG_TXWAR);
+				if(MCP_ShadowRegs[1] & MCP_EFLG_RXWAR);
+				if(MCP_ShadowRegs[1] & MCP_EFLG_EWARN);
+			}
+
+			if(MCP_ShadowRegs[0] & MCP_CANINTF_TX2IF)
+			{
+				MCP_TXn_Ready |= 0x04;	//Flag TX2 as ready for a message
+			}
+
+			if(MCP_ShadowRegs[0] & MCP_CANINTF_TX1IF)
+			{
+				MCP_TXn_Ready |= 0x02;	//Flag TX1 as ready for a message
+			}
+
+			if(MCP_ShadowRegs[0] & MCP_CANINTF_TX0IF)
+			{
+				MCP_TXn_Ready |= 0x01;	//Flag TX0 as ready for a message
+			}
+			MCP_ResetFlags[0] = MCP_ShadowRegs[0];				// Mask modified above
+			MCP_ResetFlags[1] = 0;								// Set data byte as all 0
+			SR2_SPI(MCP_BITMOD, MCP_CANINTF, 2, MCP_ResetFlags);
+
+			MCP_ResetFlags[0] = MCP_ShadowRegs[1];				// Mask modified above
+			MCP_ResetFlags[1] = 0;								// Set data byte as all 0
+			SR2_SPI(MCP_BITMOD, MCP_EFLG, 2, MCP_ResetFlags);
 		}
 	}
-
-	if(MCP_ShadowRegs[0] & MCP_CANINTF_RX1IF)
-	{
-		StopWatchRestart(canA_watch);					//received message on A, therefore A is not dead
-		tmp = Buffer_MCPGetMessage(&Buf_Ato2, 0);
-		if (tmp != -1)
-		{
-			ops.canAto2.fields.Buffer_level = tmp;		//update buffer level
-		}
-		else
-		{
-			ops.canAto2.fields.Buffer_Overflows += 1;	//update overflow counter
-			// Todo possible do something else about overflows
-		}
-	}
-
-	/*
-	 * According to MCP2515 datasheet section 7.0, "It is recommended that the Bit Modify
-	 * command be used to reset flag bits in the CANINTF register rather than normal
-	 * write operations. This is done to prevent unintentionally changing a flag that
-	 * changes during a Write command, potentially cuasing an interrupt to be missed.
-	 */
-
-	//clear all the MCP2515 interrupt flags and error flags
-	//MCP_ShadowRegs[0] = 0;
-	//MCP_ShadowRegs[1] = 0;
-	//SR2_SPI(MCP_WRITE, MCP_CANINTF, 2, MCP_ShadowRegs);
-
-	MCP_ResetFlags[0] = MCP_ShadowRegs[0];				// Mask modified above
-	MCP_ResetFlags[1] = 0;								// Set data byte as all 0
-	SR2_SPI(MCP_BITMOD, MCP_CANINTF, 2, MCP_ResetFlags);
-	/*
-	 * "It should be noted that the CANINTF flags are read/write and an interrupt can
-	 * be generated by the MCU setting any of these bits.
-	 */
-
 	// To receive more interrupts from this PIE group, acknowledge this interrupt
 	PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
 }

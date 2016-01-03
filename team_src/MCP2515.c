@@ -361,12 +361,10 @@ int Buffer_MCPGetMessage(buffer_struct* buf, int rxbn)
 	{
 		if(rxbn == 0)
 		{
-			//SR2_SPI(MCP_READ, MCP_RXB0SIDH, 13, &buf->buf[buf->in][0]);	//read raw can message
 			READ_RX_SPI(MCP_READRX0, &buf->buf[buf->in][0]);
 		}
 		else
 		{
-			//SR2_SPI(MCP_READ, MCP_RXB1SIDH, 13, &buf->buf[buf->in][0]);	//read raw can message
 			READ_RX_SPI(MCP_READRX2, &buf->buf[buf->in][0]);
 		}
 		if (++buf->in == CANQUEUEDEPTH) buf->in = 0;					//increment with wrap

@@ -23,7 +23,6 @@ typedef struct
 	int full;
 	int empty;
 	int count;
-	unsigned int errors;
 }buffer_struct;
 
 #endif /* COMMON_H_ */

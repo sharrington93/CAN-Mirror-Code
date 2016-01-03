@@ -69,6 +69,8 @@ void SensorCovInit()
 	// MCP2515 !int is on GPIO20 is XINT1
 	EALLOW;
 	GpioIntRegs.GPIOXINT1SEL.bit.GPIOSEL = 20;   // XINT1 is GPIO20
+	//GpioIntRegs.GPIOXINT1SEL.bit.GPIOSEL = 22;   // XINT1 is GPIO22
+	//GpioIntRegs.GPIOXINT2SEL.bit.GPIOSEL = 32;   // XINT1 is GPIO20
 	EDIS;
 
 	// Configure XINT1
@@ -117,7 +119,7 @@ void SensorCovMeasure()
 
 //*********************************************************************MCP2515 service*******************************************************************************************
 
-
+	/*
 	//send messages from 2 to A
 	if (MCP_TXn_Ready != 0)																//check that at least one of the transmit buffers is ready for sending
 		if (Buf_2toA.empty == 0)														//check that we have a message to send
@@ -182,6 +184,7 @@ void SensorCovMeasure()
 	if (ops.canAto2.fields.flags & 0x10)				//check for off-bus condition
 		MCP2515_Total_Reset(500);						//reset the MCP2515 after 500 ms
 
+	*/
 //*****************************************************************end MCP2515 service********************************************************************************************
 
 //***********************************************This code takes care of sending messages out on CAN bus 2************************************************************************
@@ -209,11 +212,15 @@ void SensorCovMeasure()
 				{//extended ID
 					ECanaMboxes.MBOX4.MSGID.all = (0x80000000L | (tmp_buffer[1] & 0x00000003L) << 27 | (tmp_buffer[2] & 0x000000FFL) << 19 | (tmp_buffer[3] & 0x000000FFL) << 10 | (tmp_buffer[0] & 0x000000FFL) << 3 | (tmp_buffer[1] & 0x000000E0L) >> 5);
 				}
+
 				else
 				{//standard ID
 					ECanaMboxes.MBOX4.MSGID.bit.STDMSGID = (0x00000000L | (tmp_buffer[0] & 0x000000FFL) << 3 | (tmp_buffer[1] & 0x000000E0L) >> 5);
 				}
-
+				if(ECanaMboxes.MBOX4.MSGID.bit.STDMSGID == 358)
+				{
+					ECanaMboxes.MBOX4.MSGCTRL.bit.DLC = tmp_buffer[4] & 0x000F;			//DLC
+				}
 				ECanaMboxes.MBOX4.MSGCTRL.bit.DLC = tmp_buffer[4] & 0x000F;			//DLC
 				ECanaShadow.CANMD.bit.MD4 = 0; 			//transmit
 				ECanaShadow.CANME.bit.ME4 = 1;			//enable
