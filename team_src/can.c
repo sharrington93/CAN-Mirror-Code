@@ -735,7 +735,7 @@ __interrupt void  XINT1_ISR(void)
 	int tmp;
 	// Insert ISR Code here
 
-	while (GpioDataRegs.GPADAT.bit.GPIO20 == 0) // While MCP2515 interrupt pin still high
+	if (GpioDataRegs.GPADAT.bit.GPIO20 == 0) // While MCP2515 interrupt pin still high
 	{
 		if(GpioDataRegs.GPADAT.bit.GPIO22 == 0)	//RXBUF0
 		{

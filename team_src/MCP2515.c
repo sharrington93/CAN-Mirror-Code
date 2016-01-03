@@ -355,7 +355,7 @@ void Buffer_Clear(buffer_struct* buf)
 }
 
 int Buffer_MCPGetMessage(buffer_struct* buf, int rxbn)
-{//reads a message from MCP2515 RXBn into buf. Returns number of items in buffer after read, or -1 on overflow
+{//reads a message from MCP2515 RXBn into buf.
 
 	if(buf->full == 0)		//test if buffer is full
 	{
@@ -367,11 +367,7 @@ int Buffer_MCPGetMessage(buffer_struct* buf, int rxbn)
 		{
 			READ_RX_SPI(MCP_READRX2, &buf->buf[buf->in][0]);
 		}
-		if (++buf->in == CANQUEUEDEPTH) buf->in = 0;					//increment with wrap
-		if (buf->in == buf->out) buf->full = 1;							//test for full
-		buf->empty = 0;													//just wrote, can't be empty
-		buf->count +=1;													//increment counter
-		return buf->count;
+		return 0;
 	}
 	else
 	{

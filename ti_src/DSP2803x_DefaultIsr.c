@@ -599,22 +599,7 @@ __interrupt void SPITXINTA_ISR(void)     // SPI-A
   for(;;);
 }
 
-// INT6.3
-__interrupt void SPIRXINTB_ISR(void)    // SPI-B
-{
-  // Insert ISR Code here
-
-  // To receive more interrupts from this PIE group, acknowledge this interrupt
-  // PieCtrlRegs.PIEACK.all = PIEACK_GROUP6;
-
-  // Next two lines for debug only to halt the processor here
-  // Remove after inserting ISR Code
-  __asm ("      ESTOP0");
-  for(;;);
-}
-
-// INT6.4
-__interrupt void SPITXINTB_ISR(void)     // SPI-B
+__interrupt void SPITXINTB_ISR(void)    // SPI-B
 {
   // Insert ISR Code here
 

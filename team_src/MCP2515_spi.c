@@ -15,6 +15,12 @@ void SR_SPI(unsigned int length, unsigned int *buf);
 void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsigned int *buf);
 void MCP2515_reset(unsigned int rst);
 
+extern buffer_struct Buf_Ato2;
+
+unsigned int *current_message;
+unsigned int byte_num;
+unsigned int tx_bytes;
+
 void SR_SPI(unsigned int length, unsigned int *buf)
 {
 	unsigned int i;
@@ -28,11 +34,11 @@ void SR_SPI(unsigned int length, unsigned int *buf)
 		while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
 		buf[i] = SpibRegs.SPIRXBUF;				//save response
 	}
-	SPI_CS_HIGH();								//set CS high
 
 	EINT;										//re-enable interrupts
 }
 
+// Deprecated
 void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsigned int *buf)
 {
 	unsigned int i;
@@ -60,24 +66,15 @@ void SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int length, unsign
 	EINT;										//enable interrupts
 }
 
-void READ_RX_SPI(unsigned int address, unsigned int *buf)
+void READ_RX_SPI(unsigned int address, unsigned int *buf, unsigned int tx_length)
 {
-	unsigned int i;
+	current_message = buf;
+	byte_num = 0;
+	tx_bytes = tx_length;
 	DINT;
 
 	SPI_CS_LOW();
-
 	SpibRegs.SPITXBUF=(address<<8);				//send byte
-	while(SpibRegs.SPIFFRX.bit.RXFFST !=1);		//wait for response
-	i = SpibRegs.SPIRXBUF;						//dummy read
-
-	for(i = 0; i < 13; i++)
-	{
-		SpibRegs.SPITXBUF=(buf[i]<<8);			//send byte
-		while(SpibRegs.SPIFFRX.bit.RXFFST !=1);	//wait for response
-		buf[i] = SpibRegs.SPIRXBUF;				//save response
-	}
-	SPI_CS_HIGH();								//set CS high
 
 	EINT;										//enable interrupts
 }
@@ -199,3 +196,23 @@ void MCP2515_spi_init()
 
 }
 
+// INT6.3
+__interrupt void SPIRXINTB_ISR(void)    // SPI-B
+{
+	current_message[byte_num] = SpibRegs.SPIRXBUF;
+
+	if(byte_num == tx_bytes)		//We have sent and now received all bytes.
+	{
+		SPI_CS_HIGH();				//set CS high
+		// Increase buffer length so that message can be mirrored now
+		if (++Buf_Ato2.in == CANQUEUEDEPTH) Buf_Ato2->in = 0;					//increment with wrap
+		if (Buf_Ato2->in == Buf_Ato2->out) Buf_Ato2->full = 1;							//test for full
+		Buf_Ato2->empty = 0;													//just wrote, can't be empty
+		Buf_Ato2->count +=1;
+		XINT1_ISR();				//Return to XINT1 to ensure no more flags present
+	}
+
+    SpiaRegs.SPIFFRX.bit.RXFFOVFCLR=1;  // Clear Overflow flag
+    SpiaRegs.SPIFFRX.bit.RXFFINTCLR=1;  // Clear Interrupt flag
+    PieCtrlRegs.PIEACK.all|=0x20;       // Issue PIE ack
+}
