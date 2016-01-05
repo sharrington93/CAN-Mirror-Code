@@ -18,7 +18,7 @@ int MCP2515GetMessage(unsigned int *dmesg);
 int MCP2515GetMessageAvailable(void);
 void MCP2515Mode(unsigned int Mode);
 void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data);
-void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned int dl, unsigned int *data);
+//void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned int dl, unsigned int *data);
 unsigned int MCP2515Read(unsigned int Addr);
 void MCP2515ReadBlock(unsigned int Addr, unsigned int* buf, unsigned int length);
 void MCP2515Write(unsigned int Addr, unsigned int Data);
@@ -29,6 +29,9 @@ int Buffer_MCPFillMessage(buffer_struct* buf, int txbn);				//Fills TBXn on MCP2
 int Buffer_Read(buffer_struct* buf, unsigned int* data);			//a buffer read is always 13 bytes
 int Buffer_Write(buffer_struct* buf, unsigned int* data);
 
+extern spi_transaction_in_progress;
+buffer_struct* current_buf;
+
 //*****************************************************************************
 
 //sends a CAN message.
@@ -36,11 +39,13 @@ int Buffer_Write(buffer_struct* buf, unsigned int* data);
 //ExtID[15:0] are the extended identifier bits [15:0] 
 //DataL bit [6] is the RTR bit, bits [3:0] are the data length bits.
 //Data is a buffer of length (DataL & 0x0f), ie the 4 bit data length code. max of 8 bytes.
+
+// ***************** CAN SENDING CURRENTLY NOT SUPPORTED **********************
 int MCP2515SendMessage(unsigned int ID, unsigned long ExtID, unsigned int DataL, unsigned int* Data)
 {
 	int i;
 	int tmp;
-	MCP2515LoadTx(0, ID, ExtID, DataL, Data);					//load tx buffer
+	//MCP2515LoadTx(0, ID, ExtID, DataL, Data);					//load tx buffer
 	MCP2515Write(MCP_TXB0CTRL,0x0B);							//flag message for sending
 	i=0;														//basic timeout. would be better to use a system tick
 	do
@@ -59,29 +64,31 @@ int MCP2515SendMessage(unsigned int ID, unsigned long ExtID, unsigned int DataL,
 //Reads a single register of the MCP2515
 unsigned int MCP2515Read(unsigned int Addr)
 {
-	unsigned int buf[3];
-	buf[0] = MCP_READ;
-	buf[1] = Addr;
-	buf[2] = 0x00;
-	SR_SPI(3,buf);
-	return buf[2];
+	unsigned int write[2];
+	unsigned int read[1];
+	write[0] = MCP_READ;
+	write[1] = Addr;
+	read[0] = 0x00;
+	while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+	Send_SPI(write, 2, read, 1, NULL);
+	return read[0];
 }
 
 //*****************************************************************************
 //reads a contiguous block of registers starting at Addr
 void MCP2515ReadBlock(unsigned int Addr, unsigned int* buf, unsigned int length)
 {
-	SR2_SPI(MCP_READ, Addr, length, buf);
+	unsigned int spi_command[2] = {MCP_READ, Addr};
+	while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+	Send_SPI(spi_command, 2, buf, length, NULL);
 }
 //******************************************************************************
 //writes a single register of the MCP2515
 void MCP2515Write(unsigned int Addr, unsigned int Data)
 {
-	unsigned int buf[3];
-	buf[0] = MCP_WRITE;
-	buf[1] = Addr;
-	buf[2] = Data;
-	SR_SPI(3,buf);
+	unsigned int spi_write[3] = {MCP_WRITE, Addr, Data};
+	while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+	Send_SPI(spi_write, 3, NULL, 0, NULL);
 }
 
 //*****************************************************************************
@@ -107,7 +114,7 @@ int MCP2515SetMask(unsigned int N, unsigned int *buf)
 			addr = MCP_RXM1SIDH;	
 		break;
 		}
-		SR2_SPI(MCP_WRITE, addr, 4, buf);
+		//SR2_SPI(MCP_WRITE, addr, 4, buf);
 		return 0;
 	}
 	else
@@ -150,7 +157,7 @@ int MCP2515SetFilter(unsigned int N, unsigned int *buf)
 			addr = MCP_RXF5SIDH;	
 		break;
 		}
-		SR2_SPI(MCP_WRITE, addr, 4, buf);
+		//SR2_SPI(MCP_WRITE, addr, 4, buf);
 		return 0;
 	}
 	else
@@ -179,7 +186,9 @@ unsigned int MCP2515SetBitTiming(unsigned int cnf1, unsigned int cnf2, unsigned 
 		buf[2] = cnf3;			//value to write to CNF3
 		buf[3] = cnf2;			//value to write to CNF2
 		buf[4] = cnf1;
-		SR_SPI(5,buf);
+		while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+		Send_SPI(buf, 5, NULL, 0, NULL);
+		//SR_SPI(5,buf);
 		return 0;
 	}
 	else
@@ -200,7 +209,7 @@ unsigned int MCP2515SetBitTiming(unsigned int cnf1, unsigned int cnf2, unsigned 
 void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data)
 {
 
-	unsigned int buf[12];
+	unsigned int buf[14];
 	unsigned int i;
 
 	MCP2515_reset(1);			//hold MCP2515 in reset
@@ -235,14 +244,23 @@ void PgmInitMCP2515(unsigned int cnf1, const unsigned int *data)
 
 	//set mask/filter registers
 	//masks 0,1 are contiguous, can set them with a single write
-	for(i=0;i<8;i++) buf[i]=data[i];
-	SR2_SPI(MCP_WRITE, MCP_RXM0SIDH, 8, buf);	//will take values data[0] - data[7]
-	 //filters 0,1,2 are contiguous, can set them with a single write
-	for(i=0;i<12;i++) buf[i]=data[i+8];
-	SR2_SPI(MCP_WRITE, MCP_RXF0SIDH, 12, buf);	//will take values data[8] - data[19]
+	buf[0] = MCP_WRITE;
+	buf[1] = MCP_RXM0SIDH;
+	for(i=2;i<10;i++) buf[i]=data[i];
+	while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+	Send_SPI(buf, 10, NULL, 0, NULL);	//will take values data[0] - data[7]
+
+	//filters 0,1,2 are contiguous, can set them with a single write
+	buf[1] = MCP_RXF0SIDH;
+	for(i=2;i<14;i++) buf[i]=data[i+8];
+	while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+	Send_SPI(buf, 14, NULL, 0, NULL);	//will take values data[8] - data[19]
+
 	//filters 3,4,5 are contiguous, can set them with a single write
-	for(i=0;i<12;i++) buf[i]=data[i+20];
-	SR2_SPI(MCP_WRITE, MCP_RXF3SIDH, 12, buf);	//will take values data[20] - data[31]
+	buf[1] = MCP_RXF3SIDH;
+	for(i=2;i<14;i++) buf[i]=data[i+20];
+	while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+	Send_SPI(buf, 14, NULL, 0, NULL);	//will take values data[20] - data[31]
 
 	//set normal mode
 	MCP2515Mode(0x00);
@@ -263,11 +281,12 @@ void MCP2515Mode(unsigned int Mode)
 		{
 			//current mode is different from the one requested, send mode switch command
 			//prepare write transaction
-			buf[0] = MCP_BITMOD;		//spi command
-			buf[1] = MCP_CANCTRL;		//register address
-			buf[2] = 0xE0;			//mask
-			buf[3] = ((0x07 & Mode) << 5); 	//mode request
-			SR_SPI(4,buf);			//send transaction
+			buf[0] = MCP_BITMOD;				//spi command
+			buf[1] = MCP_CANCTRL;				//register address
+			buf[2] = 0xE0;						//mask
+			buf[3] = ((0x07 & Mode) << 5); 		//mode request
+			while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+			Send_SPI(buf, 4, NULL, 0, NULL);	//send transaction
 			//pause
 
 			DELAY_US(100);
@@ -287,6 +306,9 @@ void MCP2515Mode(unsigned int Mode)
 //note only bits 10:0 in sid are valid identifier bits. bit 15 in sid is used for the EXIDE flag
 //only bits 17:0 in eid are valid identifier bits
 
+//*********** THIS FUNCTION IS NOT SUPPORTED AT THIS TIME *********************
+
+/*
 void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned int dl, unsigned int *data)
 {
 	unsigned int i;
@@ -302,6 +324,7 @@ void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned
 	for(i=0;i<dl;i++)						//data bytes
 		buf[5+i] = data[i];
 
+
 	switch(n)
 	{
 	case 0:	SR2_SPI(MCP_WRITE, MCP_TXB0SIDH, 5+buf[4], buf); break;	//write values to buffer
@@ -309,7 +332,7 @@ void MCP2515LoadTx(unsigned int n, unsigned int sid, unsigned long eid, unsigned
 	case 2:	SR2_SPI(MCP_WRITE, MCP_TXB2SIDH, 5+buf[4], buf); break;	//write values to buffer
 	}
 }
-
+*/
 int MCP2515GetMessageAvailable(void)
 {
 	unsigned int c;
@@ -326,11 +349,11 @@ int MCP2515GetMessage(unsigned int *dmesg)
 	switch(MCP2515GetMessageAvailable())
 	{
 	case 0:
-		SR2_SPI(MCP_READ, MCP_RXB0SIDH, 13, dmesg);	//read raw can message from RXB0
+		//SR2_SPI(MCP_READ, MCP_RXB0SIDH, 13, dmesg);	//read raw can message from RXB0
 		MCP2515Write(MCP_CANINTF, 0x00);		//clear interrupt
 		return 0;
 	case 1:
-		SR2_SPI(MCP_READ, MCP_RXB1SIDH, 13, dmesg);	//read raw can message from RXB1
+		//SR2_SPI(MCP_READ, MCP_RXB1SIDH, 13, dmesg);	//read raw can message from RXB1
 		MCP2515Write(MCP_CANINTF, 0x00);		//clear interrupt
 		return 1;
 	default:
@@ -357,13 +380,18 @@ int Buffer_MCPGetMessage(buffer_struct* buf, int rxbn)
 
 	if(buf->full == 0)		//test if buffer is full
 	{
+		current_buf = buf;
 		if(rxbn == 0)
 		{
-			Read_RX_SPI(MCP_READRX0, &buf->buf[buf->in][0], 13);
+			unsigned int spi_command[1] = {MCP_READRX0};
+			while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+			Send_SPI(spi_command, 1, &buf->buf[buf->in][0], 13, &RX_Read_SPI_Done);
 		}
 		else
 		{
-			Read_RX_SPI(MCP_READRX2, &buf->buf[buf->in][0], 13);
+			unsigned int spi_command[1] = {MCP_READRX2};
+			while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+			Send_SPI(spi_command, 1, &buf->buf[buf->in][0], 13, &RX_Read_SPI_Done);
 		}
 		return 0;
 	}
@@ -379,17 +407,24 @@ int Buffer_MCPFillMessage(buffer_struct* buf, int txbn)
 	if(buf->empty == 0)
 	{
 		if(txbn == 0)
-			SR2_SPI(MCP_WRITE, MCP_TXB0SIDH, 13, &buf->buf[buf->out][0]); 	//write values to buffer
+		{
+			unsigned int spi_command[2] = {MCP_WRITE, MCP_TXB0SIDH};
+			while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+			Send_SPI(spi_command, 2, &buf->buf[buf->out][0], 13, NULL);
+		}
 		else if(txbn == 1)
-			SR2_SPI(MCP_WRITE, MCP_TXB1SIDH, 13, &buf->buf[buf->out][0]); 	//write values to buffer
+		{
+			unsigned int spi_command[2] = {MCP_WRITE, MCP_TXB1SIDH};
+			while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+			Send_SPI(spi_command, 2, &buf->buf[buf->out][0], 13, NULL);
+		}
 		else
-			SR2_SPI(MCP_WRITE, MCP_TXB2SIDH, 13, &buf->buf[buf->out][0]); 	//write values to buffer
+		{
+			unsigned int spi_command[2] = {MCP_WRITE, MCP_TXB2SIDH};
+			while(spi_transaction_in_progress == 1); // Wait until last SPI transaction done
+			Send_SPI(spi_command, 2, &buf->buf[buf->out][0], 13, NULL);
+		}
 
-		if (++buf->out == CANQUEUEDEPTH) buf->out = 0;						//increment read pointer with wrap
-		if (buf->in == buf->out) buf->empty = 1;							//test for empty
-		buf->full = 0;														//just read, can't be full
-		buf->count -=1;														//decrement counter
-		return buf->count;
 	}
 	else
 	{
@@ -430,4 +465,13 @@ int Buffer_Read(buffer_struct* buf, unsigned int* data)
 	{
 		return -1;
 	}
+}
+
+void RX_Read_SPI_Done()
+{
+	if (++current_buf->out == CANQUEUEDEPTH) current_buf->out = 0;						//increment read pointer with wrap
+	if (current_buf->in == current_buf->out) current_buf->empty = 1;							//test for empty
+	current_buf->full = 0;														//just read, can't be full
+	current_buf->count -=1;														//decrement counter
+	XINT1_ISR();	// Return to XINT1 to service any other MCP2515 interrupt flags
 }

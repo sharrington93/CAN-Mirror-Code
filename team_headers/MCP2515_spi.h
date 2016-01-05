@@ -7,9 +7,8 @@
 #ifndef SPI_H_
 #define SPI_H_
 
-extern void SR_SPI(unsigned int length, unsigned int *buf);
-extern int SR2_SPI(unsigned int byte1, unsigned int byte2, unsigned int rx_length, unsigned int *message_buf);
-extern int Read_RX_SPI(unsigned int address, unsigned int *message_buf, unsigned int rx_length);
+extern void Send_SPI(unsigned int *tx_buffer, unsigned int tx_length, unsigned int *rx_buffer, unsigned int rx_length, void (*function_ptr)());
+extern void Fill_SPI_FIFO();
 extern void MCP2515_reset(unsigned int rst);
 extern void MCP2515_spi_init();
 

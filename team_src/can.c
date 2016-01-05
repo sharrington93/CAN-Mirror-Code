@@ -808,11 +808,11 @@ __interrupt void  XINT1_ISR(void)
 			}
 			MCP_ResetFlags[0] = MCP_ShadowRegs[0];				// Mask modified above
 			MCP_ResetFlags[1] = 0;								// Set data byte as all 0
-			SR2_SPI(MCP_BITMOD, MCP_CANINTF, 2, MCP_ResetFlags);
+			//SR2_SPI(MCP_BITMOD, MCP_CANINTF, 2, MCP_ResetFlags);
 
 			MCP_ResetFlags[0] = MCP_ShadowRegs[1];				// Mask modified above
 			MCP_ResetFlags[1] = 0;								// Set data byte as all 0
-			SR2_SPI(MCP_BITMOD, MCP_EFLG, 2, MCP_ResetFlags);
+			//SR2_SPI(MCP_BITMOD, MCP_EFLG, 2, MCP_ResetFlags);
 		}
 	}
 	// To receive more interrupts from this PIE group, acknowledge this interrupt
